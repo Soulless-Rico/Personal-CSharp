@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using ExcelFormatterConsole.Utility;
 using OfficeOpenXml;
+using OfficeOpenXml.Style;
 
 namespace ExcelFormatterConsole.Formatting;
 
@@ -10,6 +11,19 @@ public static class TvcbClass
     private const string ToFormatWorksheetName = "Celkový priebeh intenzít";
 
     private static readonly Stopwatch Stopwatch = Stopwatch.StartNew();
+
+    private static readonly Dictionary<string, string> ViableVehicleCategories = new(StringComparer.OrdinalIgnoreCase)
+    {
+        {"motorcycles", "M"},
+        {"lights", "LV"},
+        {"single-unit trucks", "NV"},
+        {"articulated trucks", "TNV"},
+        {"buses", "A"},
+        {"bicycles on road", "B"},
+        {"articulated buses", "AK"},
+        {"pedestrians", "CH"},
+    };
+
 
     private static void TimedLog(string logMessage)
     {
@@ -37,53 +51,72 @@ public static class TvcbClass
 
     public static void FormatMeasuredTime(ExcelWorksheet genWs, ExcelWorksheet toFormatWs)
     {
-        Console.WriteLine($"DEBUG: Looking at Worksheet: {genWs.Name}");
-        Console.WriteLine($"DEBUG: Value in A4 is: '{genWs.Cells["A4"].Value}'");
-
         var row = 4;
         while (row < 1000)
         {
-            // THE DATE IS NOT OADATE FORMAT
-
             var cellValue = genWs.Cells["A" + row].Value??"";
-            if ( string.IsNullOrWhiteSpace(cellValue.ToString()) || ! double.TryParse(cellValue.ToString(), out var oaDate))
+            if (string.IsNullOrWhiteSpace(cellValue.ToString()))
             {
                 row++;
                 continue;
             }
 
-            cellValue = DateTime.FromOADate(oaDate);
-            row++;
+            if (!DateTime.TryParse(cellValue.ToString(), out DateTime dtCellValue))
+            {
+                break;
+            }
 
+            row++;
             var nextCellValue = genWs.Cells["A" + row].Value??"";
 
-            if ( string.IsNullOrWhiteSpace(nextCellValue.ToString()) || ! double.TryParse(nextCellValue.ToString(), out var nextOaDate))
+            if (string.IsNullOrWhiteSpace(nextCellValue.ToString()) || !DateTime.TryParse(nextCellValue.ToString(), out DateTime dtNextCellValue))
             {
                 row--;
-                var nextRow = row + 1;
+                var beforeLastRow = row - 1;
 
-                cellValue = genWs.Cells["A" + row].Value;
-                nextCellValue = genWs.Cells["A" + nextRow].Value;
+                cellValue = genWs.Cells["A" + beforeLastRow].Value;
+                nextCellValue = genWs.Cells["A" + row].Value;
 
-                var difference = DateTime.Parse(nextCellValue.ToString()) - DateTime.Parse(cellValue.ToString());
+                var difference = DateTime.Parse(nextCellValue.ToString()??"00:00") - DateTime.Parse(cellValue.ToString()??"");
 
-                nextCellValue = DateTime.Parse(cellValue.ToString()).AddMinutes(difference.TotalMinutes);
+                nextCellValue = DateTime.Parse(nextCellValue.ToString()??"00:00").AddMinutes(difference.TotalMinutes);
+                cellValue = DateTime.Parse(nextCellValue.ToString() ?? "00:00").AddMinutes(-difference.TotalMinutes);
+
                 toFormatWs.Cells["A" + row].Value = $"{cellValue:HH:mm} - {nextCellValue:HH:mm}";
 
                 break;
             }
 
-            nextCellValue = DateTime.FromOADate(nextOaDate);
-
             var correctCellRow = row - 1;
-            toFormatWs.Cells["A" + correctCellRow].Value = $"{cellValue:HH:mm} - {nextCellValue:HH:mm}";
+            toFormatWs.Cells["A" + correctCellRow].Value = $"{dtCellValue:HH:mm} - {dtNextCellValue:HH:mm}";
         }
     }
 
-    /*
+
     public static void FormatVehicleCategories(ExcelWorksheet genWs, ExcelWorksheet toFormatWs)
     {
+        List<string> vehicleCategoryTranslations = [];
 
+        var lastRow = genWs.Dimension.End.Row;
+        var firstRowAfterDates = toFormatWs.Dimension.End.Row;
+
+        for (var row = firstRowAfterDates; row <= lastRow; row++)
+        {
+            var cellValue = genWs.Cells["A" + row].Value?.ToString()??"".ToLower().Trim();
+            if (ViableVehicleCategories.TryGetValue(cellValue, out var translation))
+            {
+                vehicleCategoryTranslations.Add(translation);
+            }
+        }
+
+        for (var listIndex = 0; listIndex < vehicleCategoryTranslations.Count; listIndex++)
+        {
+            var column = listIndex + 2;
+            var translation = vehicleCategoryTranslations[listIndex];
+
+            toFormatWs.Cells[1, column].Value = translation;
+            toFormatWs.Cells[1, column, 3, column].Merge = true;
+        }
     }
 
     public static void ReadPrimaryData(ExcelWorksheet genWs, ExcelWorksheet toFormatWs)
@@ -106,11 +139,16 @@ public static class TvcbClass
 
     }
 
-    public static void Styling(ExcelWorksheet genWs, ExcelWorksheet toFormatWs)
+    public static void Styling(ExcelWorksheet toFormatWs)
     {
+        toFormatWs.Cells.AutoFitColumns();
+        toFormatWs.Cells.Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
+        toFormatWs.Cells.Style.VerticalAlignment = ExcelVerticalAlignment.Center;
+        toFormatWs.Cells["1:3"].Style.Font.Bold = true;
+        toFormatWs.Cells["A:A"].Style.Font.Bold = true;
 
     }
-    */
+
 
 
 }
