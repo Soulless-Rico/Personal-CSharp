@@ -10,8 +10,6 @@ public static class Formatter
     {
         Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] ----- Program Started -----");
 
-        ExcelPackage.License.SetNonCommercialOrganization("Paulos-DLS");
-
         var (toFormatExcelFilePath, generatedExcelFilePath) = ExcelFileEntry.LoadSelectedFiles();
         using var genPackage = new ExcelPackage(new FileInfo(generatedExcelFilePath));
         using var toFormatPackage = new ExcelPackage(new FileInfo(toFormatExcelFilePath));
@@ -36,4 +34,5 @@ public static class Formatter
         toFormatPackage.Save();
         Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] ----- Program Finished -----]");
     }
+
 }
