@@ -1,4 +1,4 @@
-﻿using OfficeOpenXml;
+using OfficeOpenXml;
 using ExcelFormatterConsole.Formatting;
 using ExcelFormatterConsole.Utility;
 
@@ -14,18 +14,16 @@ public static class Formatter
         using var genPackage = new ExcelPackage(new FileInfo(generatedExcelFilePath));
         using var toFormatPackage = new ExcelPackage(new FileInfo(toFormatExcelFilePath));
 
-        BasicDirectionsClass.LoadPaths(toFormatExcelFilePath, generatedExcelFilePath);
+        BasicDirectionsClass.DefaultData(genPackage.Workbook.Worksheets[0], toFormatPackage.Workbook.Worksheets[0]);
+
+        var directions = BasicDirectionsClass.FindAllDirections(genPackage);
+        for (var direction = 1; direction <= directions; direction++)
+        {
+            BasicDirectionsClass.BasicDirections(direction, genPackage, toFormatPackage);
+        }
 
         var genWs =  TvcbClass.FindCorrectWorksheet(genPackage);
         var toFormatWs =  TvcbClass.Prepare(toFormatPackage);
-
-        BasicDirectionsClass.DefaultData();
-
-        int directions = BasicDirectionsClass.FindAllDirections();
-        for (int direction = 1; direction <= directions; direction++)
-        {
-            BasicDirectionsClass.BasicDirections(direction);
-        }
 
         TvcbClass.FormatMeasuredTime(genWs, toFormatWs);
         TvcbClass.FormatVehicleCategories(genWs, toFormatWs);
@@ -34,5 +32,4 @@ public static class Formatter
         toFormatPackage.Save();
         Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] ----- Program Finished -----]");
     }
-
 }
