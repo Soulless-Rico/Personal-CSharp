@@ -12,7 +12,7 @@ public static class TvcbClass
 
     private static readonly Stopwatch Stopwatch = Stopwatch.StartNew();
 
-    private static readonly Dictionary<string, string> ViableVehicleCategories = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly Dictionary<string, string> ViableVehicleCategoryTranslations = new(StringComparer.OrdinalIgnoreCase)
     {
         {"motorcycles", "M"},
         {"lights", "LV"},
@@ -22,6 +22,18 @@ public static class TvcbClass
         {"bicycles on road", "B"},
         {"articulated buses", "AK"},
         {"pedestrians", "CH"},
+    };
+
+    private static readonly HashSet<string> ViableVehicleCategories = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "motorcycles",
+        "lights",
+        "single-unit trucks",
+        "articulated trucks",
+        "buses",
+        "bicycles on road",
+        "articulated buses",
+        "pedestrians",
     };
 
 
@@ -103,7 +115,7 @@ public static class TvcbClass
         for (var row = firstRowAfterDates; row <= lastRow; row++)
         {
             var cellValue = genWs.Cells["A" + row].Value?.ToString()??"".ToLower().Trim();
-            if (ViableVehicleCategories.TryGetValue(cellValue, out var translation))
+            if (ViableVehicleCategoryTranslations.TryGetValue(cellValue, out var translation))
             {
                 vehicleCategoryTranslations.Add(translation);
             }
@@ -121,7 +133,30 @@ public static class TvcbClass
 
     public static void ReadPrimaryData(ExcelWorksheet genWs, ExcelWorksheet toFormatWs)
     {
+        var lastRow = genWs.Dimension.End.Row;
+        var firstRowBeforeDates = toFormatWs.Dimension.End.Row;
 
+        for (var row = firstRowBeforeDates; row <= lastRow; row++)
+        {
+            var cellValue = genWs.Cells["A" + row].Value?.ToString() ?? "";
+            if (!ViableVehicleCategories.Contains(cellValue))
+            {
+                continue;
+            }
+
+            List<string> primaryDataList = [];
+            var lastColumn = genWs.Dimension.End.Column;
+            for (var column = 1; column <= lastColumn; column++)
+            {
+                cellValue = genWs.Cells[row, column].Value?.ToString()??"0".Trim();
+                if (ViableVehicleCategories.Contains(cellValue))
+                {
+                    continue;
+                }
+
+                primaryDataList.Add(cellValue);
+            }
+        }
     }
 
     public static void WritePrimaryData(ExcelWorksheet genWs, ExcelWorksheet toFormatWs)
