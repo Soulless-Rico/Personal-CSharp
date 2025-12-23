@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
 using OfficeOpenXml;
@@ -9,9 +9,6 @@ namespace ExcelFormatterConsole.Formatting;
 
 public static class BasicDirectionsClass
 {
-    public static string ToFormatExcelFilePath = null!;
-    public static string GeneratedExcelFilePath = null!;
-
     private const string FullDateFormat24Seconds = "dd-MM-yyyy HH:mm:ss";
 
     private static int _directions;
@@ -98,14 +95,6 @@ public static class BasicDirectionsClass
         Stopwatch.Restart();
     }
 
-    public static void LoadPaths(string toFormatExcelFilePath, string generatedExcelFilePath)
-    {
-        ToFormatExcelFilePath = toFormatExcelFilePath;
-        GeneratedExcelFilePath = generatedExcelFilePath;
-
-        TimedLog("BasicDirectionsClass | Successfully referenced file paths");
-    }
-
     private static (List<string>, int) DetermineVehicleCategories(ExcelWorksheet worksheetObject)
     {
         var lastVehicleCategory = -1;
@@ -148,14 +137,9 @@ public static class BasicDirectionsClass
         return (categoryShortcuts, lastVehicleCategory);
     }
 
-    public static void DefaultData()
+    public static void DefaultData(ExcelWorksheet genWs, ExcelWorksheet toFormatWs)
     {
-        using var package = new ExcelPackage(new FileInfo(ToFormatExcelFilePath));
-        using var generatedPackage = new ExcelPackage(new FileInfo(GeneratedExcelFilePath));
-
-        var generatedWorksheet = generatedPackage.Workbook.Worksheets[0];
-        var newWorksheet = package.Workbook.Worksheets[0];
-        newWorksheet.Name = "Základné údaje";
+        toFormatWs.Name = "Základné údaje";
 
         foreach (var mapping in CellMapping)
         {
@@ -164,25 +148,25 @@ public static class BasicDirectionsClass
 
             if (cell.StartsWith("A"))
             {
-                newWorksheet.Cells[cell].Value = value;
+                toFormatWs.Cells[cell].Value = value;
             }
 
             if (cell.StartsWith("B"))
             {
-                newWorksheet.Cells[cell].Value = generatedWorksheet.Cells[cell].Value;
+                toFormatWs.Cells[cell].Value = genWs.Cells[cell].Value;
             }
         }
 
-        TimedLog($"{newWorksheet.Name} | Cell mapping 25%");
+        TimedLog($"{toFormatWs.Name} | Cell mapping 25%");
 
         try
         {
-            var dt1 = DateTime.FromOADate(Convert.ToDouble(generatedWorksheet.Cells["B7"].Value));
-            var dt2 = DateTime.FromOADate(Convert.ToDouble(generatedWorksheet.Cells["B8"].Value));
+            var dt1 = DateTime.FromOADate(Convert.ToDouble(genWs.Cells["B7"].Value));
+            var dt2 = DateTime.FromOADate(Convert.ToDouble(genWs.Cells["B8"].Value));
 
-            newWorksheet.Cells["B7"].Value =
+            toFormatWs.Cells["B7"].Value =
                 dt1.ToString(FullDateFormat24Seconds, CultureInfo.InvariantCulture);
-            newWorksheet.Cells["B8"].Value =
+            toFormatWs.Cells["B8"].Value =
                 dt2.ToString(FullDateFormat24Seconds, CultureInfo.InvariantCulture);
         }
         catch (FormatException exception)
@@ -191,23 +175,17 @@ public static class BasicDirectionsClass
             throw;
         }
 
-        TimedLog($"{newWorksheet.Name} | Date formatting 50%");
+        TimedLog($"{toFormatWs.Name} | Date formatting 50%");
 
-        newWorksheet.Cells[newWorksheet.Dimension.Address].AutoFitColumns();
-        newWorksheet.Cells["B7:B8"].Style.HorizontalAlignment = ExcelHorizontalAlignment.Right;
+        toFormatWs.Cells[toFormatWs.Dimension.Address].AutoFitColumns();
+        toFormatWs.Cells["B7:B8"].Style.HorizontalAlignment = ExcelHorizontalAlignment.Right;
 
-        TimedLog($"{newWorksheet.Name} | Styling worksheet 75%");
-
-        package.Save();
-
-        TimedLog($"{newWorksheet.Name} | Saved worksheet 100%");
+        TimedLog($"{toFormatWs.Name} | Styling worksheet 100%");
     }
 
-    public static int FindAllDirections()
+    public static int FindAllDirections(ExcelPackage genPackage)
     {
-        using var generatedPackage = new ExcelPackage(new FileInfo(GeneratedExcelFilePath));
-
-        var directionSheets = generatedPackage.Workbook.Worksheets.Where(ws => ws.Index > 0).Where(ws =>
+        var directionSheets = genPackage.Workbook.Worksheets.Where(ws => ws.Index > 0).Where(ws =>
         {
             var cleanedName = ws.Name.Trim().ToLower();
 
@@ -219,7 +197,7 @@ public static class BasicDirectionsClass
             return AllKnownDirections.Contains(cleanedName);
         }).ToList();
 
-        TimedLog($"{generatedPackage.File.Name} | Finding all directions 50%");
+        TimedLog($"{genPackage.File.Name} | Finding all directions 50%");
 
         _directions = directionSheets.Count;
 
@@ -228,7 +206,7 @@ public static class BasicDirectionsClass
         {
             // read worksheet data to determine correct direction
 
-            var selectedWorksheet = generatedPackage.Workbook.Worksheets[cycle];
+            var selectedWorksheet = genPackage.Workbook.Worksheets[cycle];
             var cellValue = selectedWorksheet.Cells["B1"].Value?.ToString() ?? string.Empty.Trim();
             var directionCode = cellValue.Split("-");
 
@@ -244,16 +222,13 @@ public static class BasicDirectionsClass
             }
         }
 
-        TimedLog($"{generatedPackage.File.Name} | Assigning direction values 100%");
+        TimedLog($"{genPackage.File.Name} | Assigning direction values 100%");
         return _directions;
     }
 
-    public static void BasicDirections(int directionNumber)
+    public static void BasicDirections(int directionNumber, ExcelPackage genPackage, ExcelPackage toFormatPackage)
     {
-        using var package = new ExcelPackage(new FileInfo(ToFormatExcelFilePath));
-        using var generatedPackage = new ExcelPackage(new FileInfo(GeneratedExcelFilePath));
-
-        var newWorksheet = package.Workbook.Worksheets.Add(directionNumber.ToString());
+        var newWorksheet = toFormatPackage.Workbook.Worksheets.Add(directionNumber.ToString());
         ExcelWorksheet? generatedWorksheet = null;
 
         // find correct worksheet -------------------------------------------------------------------------------------------------------------------------------------------------
@@ -263,7 +238,7 @@ public static class BasicDirectionsClass
             // check for correct direction
             if (direction.Contains(directionNumber + ":"))
             {
-                var sheet = generatedPackage.Workbook.Worksheets[Convert.ToInt16(direction.Trim().Remove(0, 2))];
+                var sheet = genPackage.Workbook.Worksheets[Convert.ToInt16(direction.Trim().Remove(0, 2))];
                 if (sheet != null)
                 {
                     generatedWorksheet = sheet;
@@ -637,7 +612,7 @@ public static class BasicDirectionsClass
         newWorksheet.Cells["A1:" + newWorksheet.Dimension.End.Address].Style.VerticalAlignment =
             ExcelVerticalAlignment.Center;
 
-        package.Save();
+        toFormatPackage.Save();
         TimedLog($"{newWorksheet.Name} | Styled and saved worksheet 100%");
     }
 }
