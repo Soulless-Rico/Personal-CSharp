@@ -27,6 +27,7 @@ public static class Formatter
 
         TvcbClass.FormatMeasuredTime(genWs, toFormatWs);
         TvcbClass.FormatVehicleCategories(genWs, toFormatWs);
+        TvcbClass.ReadPrimaryData(genWs, toFormatWs);
         TvcbClass.Styling(toFormatWs);
 
         toFormatPackage.Save();
