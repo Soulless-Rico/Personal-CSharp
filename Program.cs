@@ -1,4 +1,4 @@
-﻿using OfficeOpenXml;
+using OfficeOpenXml;
 using ExcelFormatterConsole.Formatting;
 using ExcelFormatterConsole.Utility;
 
@@ -9,6 +9,8 @@ public static class Formatter
     public static void Main()
     {
         Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] ----- Program Started -----");
+
+        ExcelPackage.License.SetNonCommercialOrganization("Paulos-DLS");
 
         var (toFormatExcelFilePath, generatedExcelFilePath) = ExcelFileEntry.LoadSelectedFiles();
         using var genPackage = new ExcelPackage(new FileInfo(generatedExcelFilePath));
@@ -27,7 +29,7 @@ public static class Formatter
 
         TvcbClass.FormatMeasuredTime(genWs, toFormatWs);
         TvcbClass.FormatVehicleCategories(genWs, toFormatWs);
-        TvcbClass.ReadPrimaryData(genWs, toFormatWs);
+        TvcbClass.ReadPrimaryData(genPackage, toFormatPackage);
         TvcbClass.Styling(toFormatWs);
 
         toFormatPackage.Save();
