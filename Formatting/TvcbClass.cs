@@ -36,6 +36,25 @@ public static class TvcbClass
         "pedestrians",
     };
 
+    private static readonly HashSet<string> AllKnownDirections = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "north",
+        "north-northeast",
+        "northeast",
+        "east-northeast",
+        "east",
+        "east-southeast",
+        "southeast",
+        "south-southeast",
+        "south",
+        "south-southwest",
+        "southwest",
+        "west-southwest",
+        "west",
+        "west-northwest",
+        "northwest",
+        "north-northwest"
+    };
 
     private static void TimedLog(string logMessage)
     {
@@ -131,35 +150,78 @@ public static class TvcbClass
         }
     }
 
-    public static void ReadPrimaryData(ExcelWorksheet genWs, ExcelWorksheet toFormatWs)
+    public static void ReadPrimaryData(ExcelPackage genPackage, ExcelPackage toFormatPackage)
     {
-        var lastRow = genWs.Dimension.End.Row;
-        var firstRowBeforeDates = toFormatWs.Dimension.End.Row;
+        // !!! MAKE THE VALUES ADD UP INSTEAD OF OVERRIDING THEM EVERYTIME THE CATEGORY MATCHES !!!
+        List<ExcelWorksheet> directionWorksheetsList =
+            genPackage.Workbook.Worksheets.Where(ws => ws.Index > 0).Where(ws => AllKnownDirections.Contains(ws.Name.Replace("bound", "").Trim())).ToList();
 
-        for (var row = firstRowBeforeDates; row <= lastRow; row++)
+        Dictionary<string, Dictionary<string, string>> vehicleCategoryPrimaryDataMapping = [];
+        Console.WriteLine($"worksheets: {directionWorksheetsList.Count}");
+        foreach (var ws in directionWorksheetsList)
         {
-            var cellValue = genWs.Cells["A" + row].Value?.ToString() ?? "";
-            if (!ViableVehicleCategories.Contains(cellValue))
+            Console.WriteLine($"worksheet: {ws.Name}");
+            var lastRow = ws.Dimension.End.Row;
+            for (var row = 4; row <= lastRow; row++)
             {
-                continue;
-            }
-
-            List<string> primaryDataList = [];
-            var lastColumn = genWs.Dimension.End.Column;
-            for (var column = 1; column <= lastColumn; column++)
-            {
-                cellValue = genWs.Cells[row, column].Value?.ToString()??"0".Trim();
-                if (ViableVehicleCategories.Contains(cellValue))
+                Console.WriteLine($"row: {row}");
+                var lastColumn = ws.Dimension.End.Column;
+                string cleanedDate = string.Empty;
+                for (var column = 1; column <= lastColumn; column++)
                 {
-                    continue;
-                }
+                    Console.WriteLine($"column: {column}");
+                    if (column == 1)
+                    {
+                        var dateKey = ws.Cells[row, column].Value?.ToString()??string.Empty;
+                        if (!double.TryParse(dateKey, out var oaDate))
+                        {
+                            if (!DateTime.TryParse(dateKey, out var parsedDate))
+                            {
+                                throw new DateTimeConversionException("TvcbClass.ReadPrimaryData | Failed to convert into a DateTime object to be used as the first dictionary key.");
+                            }
 
-                primaryDataList.Add(cellValue);
+                            cleanedDate = $"{parsedDate:HH:mm}";
+                        }
+                        else
+                        {
+                            cleanedDate = $"{DateTime.FromOADate(oaDate):HH:mm}";
+                        }
+
+                        if (!vehicleCategoryPrimaryDataMapping.ContainsKey(cleanedDate))
+                        {
+                            vehicleCategoryPrimaryDataMapping[cleanedDate] = new Dictionary<string, string>();
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine(cleanedDate);
+                        const int categoriesRow = 3;
+                        var category = ws.Cells[categoriesRow, column].Value?.ToString()??string.Empty;
+                        if (string.IsNullOrWhiteSpace(category) || !ViableVehicleCategories.Contains(category))
+                        {
+                            throw new CategoryMatchException("TvcbClass.ReadPrimaryData | No valid category was found to be used as the second dictionary key.");
+                        }
+
+                        var cellValue = ws.Cells[row, column].Value?.ToString()??string.Empty;
+                        if (string.IsNullOrWhiteSpace(cellValue))
+                        {
+                            continue;
+                        }
+
+                        if (!double.TryParse(cellValue, out _))
+                        {
+                            throw new PrimaryDataValueException($"TvcbClass.ReadPrimaryData | Found an incorrect value: '{cellValue}' | row: {row} column: {column}.");
+                        }
+
+                        Console.WriteLine($"cleanedDate: {cleanedDate} | category: {category} | cellValue: {cellValue}");
+                        vehicleCategoryPrimaryDataMapping[cleanedDate][category] = cellValue;
+                    }
+                }
             }
         }
     }
 
-    public static void WritePrimaryData(ExcelWorksheet genWs, ExcelWorksheet toFormatWs)
+    public static void WritePrimaryData(List<string> primaryDataList, ExcelWorksheet genWs, ExcelWorksheet toFormatWs)
     {
 
     }
