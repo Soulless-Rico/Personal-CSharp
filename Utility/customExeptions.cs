@@ -36,19 +36,37 @@ public class MissingDirectionMach : Exception
     }
 }
 
-public class ValueConversionException : Exception
+public class EmptyArgumentException : Exception
 {
-    public ValueConversionException()
-        : base("Value conversion has failed")
+    public EmptyArgumentException()
+        : base("Some value was detected to be empty when it wasn't supposed to be.")
     {
     }
 
-    public ValueConversionException(string exceptionMessage)
+    public EmptyArgumentException(string exceptionMessage)
         : base(exceptionMessage)
     {
     }
 
-    public ValueConversionException(string exceptionMessage, Exception innerException)
+    public EmptyArgumentException(string exceptionMessage, Exception innerException)
+        : base(exceptionMessage, innerException)
+    {
+    }
+}
+
+public class CategoryMatchException : Exception
+{
+    public CategoryMatchException()
+        : base("Category has failed to match any existing ones.")
+    {
+    }
+
+    public CategoryMatchException(string exceptionMessage)
+        : base(exceptionMessage)
+    {
+    }
+
+    public CategoryMatchException(string exceptionMessage, Exception innerException)
         : base(exceptionMessage, innerException)
     {
     }
@@ -67,6 +85,42 @@ public class MissingWorksheetException : Exception
     }
 
     public MissingWorksheetException(string exceptionMsg, Exception exception)
+        : base($"Exception Message | {exceptionMsg} \nException | {exception}")
+    {
+    }
+}
+
+public class DateTimeConversionException : Exception
+{
+    public DateTimeConversionException()
+        : base("Failed to convert some value to a DateTime object.")
+    {
+    }
+
+    public DateTimeConversionException(string exceptionMsg)
+        : base(exceptionMsg)
+    {
+    }
+
+    public DateTimeConversionException(string exceptionMsg, Exception exception)
+        : base($"Exception Message | {exceptionMsg} \nException | {exception}")
+    {
+    }
+}
+
+public class PrimaryDataValueException : Exception
+{
+    public PrimaryDataValueException()
+        : base("Found incorrect values in primary data.")
+    {
+    }
+
+    public PrimaryDataValueException(string exceptionMsg)
+        : base(exceptionMsg)
+    {
+    }
+
+    public PrimaryDataValueException(string exceptionMsg, Exception exception)
         : base($"Exception Message | {exceptionMsg} \nException | {exception}")
     {
     }
