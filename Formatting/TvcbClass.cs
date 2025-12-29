@@ -56,6 +56,19 @@ public static class TvcbClass
         "north-northwest"
     };
 
+
+    private static readonly Dictionary<string, string> VehicleCategoryTranslations = new(StringComparer.OrdinalIgnoreCase)
+    {
+        {"motorcycles", "M"},
+        {"lights", "LV"},
+        {"single-unit trucks", "NV"},
+        {"articulated trucks", "TNV"},
+        {"buses", "A"},
+        {"bicycles on road", "B"},
+        {"articulated buses", "AK"},
+        {"pedestrians", "CH"},
+    };
+
     private static void TimedLog(string logMessage)
     {
         Stopwatch.Stop();
@@ -150,26 +163,21 @@ public static class TvcbClass
         }
     }
 
-    public static void ReadPrimaryData(ExcelPackage genPackage, ExcelPackage toFormatPackage)
+    public static Dictionary<string, Dictionary<string, double>> ReadPrimaryData(ExcelPackage genPackage, ExcelPackage toFormatPackage)
     {
-        // !!! MAKE THE VALUES ADD UP INSTEAD OF OVERRIDING THEM EVERYTIME THE CATEGORY MATCHES !!!
         List<ExcelWorksheet> directionWorksheetsList =
             genPackage.Workbook.Worksheets.Where(ws => ws.Index > 0).Where(ws => AllKnownDirections.Contains(ws.Name.Replace("bound", "").Trim())).ToList();
 
-        Dictionary<string, Dictionary<string, string>> vehicleCategoryPrimaryDataMapping = [];
-        Console.WriteLine($"worksheets: {directionWorksheetsList.Count}");
+        Dictionary<string, Dictionary<string, double>> primaryDataMapping = [];
         foreach (var ws in directionWorksheetsList)
         {
-            Console.WriteLine($"worksheet: {ws.Name}");
             var lastRow = ws.Dimension.End.Row;
             for (var row = 4; row <= lastRow; row++)
             {
-                Console.WriteLine($"row: {row}");
                 var lastColumn = ws.Dimension.End.Column;
                 string cleanedDate = string.Empty;
                 for (var column = 1; column <= lastColumn; column++)
                 {
-                    Console.WriteLine($"column: {column}");
                     if (column == 1)
                     {
                         var dateKey = ws.Cells[row, column].Value?.ToString()??string.Empty;
@@ -187,19 +195,23 @@ public static class TvcbClass
                             cleanedDate = $"{DateTime.FromOADate(oaDate):HH:mm}";
                         }
 
-                        if (!vehicleCategoryPrimaryDataMapping.ContainsKey(cleanedDate))
+                        if (!primaryDataMapping.ContainsKey(cleanedDate))
                         {
-                            vehicleCategoryPrimaryDataMapping[cleanedDate] = new Dictionary<string, string>();
+                            primaryDataMapping[cleanedDate] = new Dictionary<string, double>();
                         }
                     }
                     else
                     {
-                        Console.WriteLine(cleanedDate);
                         const int categoriesRow = 3;
                         var category = ws.Cells[categoriesRow, column].Value?.ToString()??string.Empty;
                         if (string.IsNullOrWhiteSpace(category) || !ViableVehicleCategories.Contains(category))
                         {
                             throw new CategoryMatchException("TvcbClass.ReadPrimaryData | No valid category was found to be used as the second dictionary key.");
+                        }
+
+                        if (!VehicleCategoryTranslations.TryGetValue(category, out var translatedCategory))
+                        {
+                            throw new CategoryMatchException($"TvcbClass.ReadPrimaryData | No translation found for the category '{category}'.");
                         }
 
                         var cellValue = ws.Cells[row, column].Value?.ToString()??string.Empty;
@@ -208,21 +220,55 @@ public static class TvcbClass
                             continue;
                         }
 
-                        if (!double.TryParse(cellValue, out _))
+                        if (!double.TryParse(cellValue, out var parsedCellValue))
                         {
                             throw new PrimaryDataValueException($"TvcbClass.ReadPrimaryData | Found an incorrect value: '{cellValue}' | row: {row} column: {column}.");
                         }
 
-                        Console.WriteLine($"cleanedDate: {cleanedDate} | category: {category} | cellValue: {cellValue}");
-                        vehicleCategoryPrimaryDataMapping[cleanedDate][category] = cellValue;
+                        if (primaryDataMapping[cleanedDate].ContainsKey(translatedCategory))
+                        {
+                            primaryDataMapping[cleanedDate][translatedCategory] += parsedCellValue;
+                        }
+                        else
+                        {
+                            primaryDataMapping[cleanedDate][translatedCategory] = parsedCellValue;
+                        }
                     }
                 }
             }
         }
+
+        return primaryDataMapping;
     }
 
-    public static void WritePrimaryData(List<string> primaryDataList, ExcelWorksheet genWs, ExcelWorksheet toFormatWs)
+    public static void WritePrimaryData(Dictionary<string, Dictionary<string, double>> primaryDataMapping, ExcelWorksheet toFormatWs)
     {
+        const int categoryRow = 1;
+        const int dateColumn = 1;
+
+        var lastRow = toFormatWs.Dimension.End.Row;
+        for (int row = 4; row <= lastRow; row++)
+        {
+            var date = (toFormatWs.Cells[row, dateColumn].Value?.ToString() ?? string.Empty).Split("-")[0].Trim();
+
+            if (string.IsNullOrWhiteSpace(date) || date.Length > 5)
+            {
+                throw new UnexpectedValueException($"TvcbClass.WritePrimaryData | Encountered an unexpected valie in the place of the date: '{date}'.");
+            }
+
+            var lastColumn = toFormatWs.Dimension.End.Column;
+            for (int column = 2; column <= lastColumn; column++)
+            {
+                var category = toFormatWs.Cells[categoryRow, column].Value?.ToString()??string.Empty;
+
+                if (string.IsNullOrWhiteSpace(category) || string.IsNullOrWhiteSpace(date))
+                {
+                    throw new UnexpectedValueException($"TvcbClass.WritePrimaryData | Encountered an unexpected value in the place of the category: '{category}'.");
+                }
+
+                toFormatWs.Cells[row, column].Value = primaryDataMapping[date][category];
+            }
+        }
 
     }
 
