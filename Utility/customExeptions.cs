@@ -125,3 +125,20 @@ public class PrimaryDataValueException : Exception
     {
     }
 }
+public class UnexpectedValueException : Exception
+{
+    public UnexpectedValueException()
+        : base("Encountered an unexpected value.")
+    {
+    }
+
+    public UnexpectedValueException(string exceptionMsg)
+        : base(exceptionMsg)
+    {
+    }
+
+    public UnexpectedValueException(string exceptionMsg, Exception exception)
+        : base($"Exception Message | {exceptionMsg} \nException | {exception}")
+    {
+    }
+}
