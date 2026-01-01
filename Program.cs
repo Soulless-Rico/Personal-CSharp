@@ -29,6 +29,9 @@ public static class Formatter
         TvcbClass.FormatVehicleCategories(genWs, toFormatWs);
         var tvcbPrimaryDataMapping = TvcbClass.ReadPrimaryData(genPackage, toFormatPackage);
         TvcbClass.WritePrimaryData(tvcbPrimaryDataMapping, toFormatWs);
+        var addedUpRowData = TvcbClass.CalculateAddedUpRowData(toFormatWs);
+        var addedUpColumnData = TvcbClass.CalculateAddedUpColumnData(toFormatWs);
+        TvcbClass.CheckForMatchingResults(toFormatWs, addedUpRowData, addedUpColumnData);
         TvcbClass.Styling(toFormatWs);
 
         toFormatPackage.Save();
