@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Drawing;
 using ExcelFormatterConsole.Utility;
 using OfficeOpenXml;
 using OfficeOpenXml.Style;
@@ -253,11 +254,11 @@ public static class TvcbClass
 
             if (string.IsNullOrWhiteSpace(date) || date.Length > 5)
             {
-                throw new UnexpectedValueException($"TvcbClass.WritePrimaryData | Encountered an unexpected valie in the place of the date: '{date}'.");
+                throw new UnexpectedValueException($"TvcbClass.WritePrimaryData | Encountered an unexpected value in the place of the date: '{date}'.");
             }
 
             var lastColumn = toFormatWs.Dimension.End.Column;
-            for (int column = 2; column <= lastColumn; column++)
+            for (var column = 2; column <= lastColumn; column++)
             {
                 var category = toFormatWs.Cells[categoryRow, column].Value?.ToString()??string.Empty;
 
@@ -272,9 +273,113 @@ public static class TvcbClass
 
     }
 
-    public static void CalculateAddedUpData(ExcelWorksheet genWs, ExcelWorksheet toFormatWs)
+    public static double CalculateAddedUpRowData(ExcelWorksheet toFormatWs)
     {
+        var lastRow = toFormatWs.Dimension.End.Row + 2;
+        var lastColumn = toFormatWs.Dimension.End.Column + 1;
+        var rowToSkip = lastRow - 1;
 
+        var everythingAddedUp = 0D;
+        for (var column = 2; column <= lastColumn; column++)
+        {
+            if (column == lastColumn)
+            {
+                toFormatWs.Cells[lastRow, lastColumn].Value = everythingAddedUp;
+                break;
+            }
+
+            var addedUpPrimaryData = 0D;
+            for (var row = 4; row <= lastRow; row++)
+            {
+                if (row == rowToSkip)
+                {
+                    continue;
+                }
+
+                if (row == lastRow)
+                {
+                    toFormatWs.Cells[row, column].Value = addedUpPrimaryData;
+                    break;
+                }
+
+                var cellValue = toFormatWs.Cells[row, column].Value?.ToString()??string.Empty;
+                if (string.IsNullOrWhiteSpace(cellValue))
+                {
+                    throw new UnexpectedValueException($"TvcbClass.CalculateAddedUpData | Detected an empty string in the cell | row: {row} column: {column}");
+                }
+
+                if (!double.TryParse(cellValue, out var parsedCellValue))
+                {
+                    throw new UnexpectedValueException($"TvcbClass.CalculateAddedUpData | Detected a non-numeric value in the cell | row: {row} column: {column}");
+                }
+
+                addedUpPrimaryData += parsedCellValue;
+            }
+
+            everythingAddedUp += addedUpPrimaryData;
+        }
+
+        return everythingAddedUp;
+    }
+
+    public static double CalculateAddedUpColumnData(ExcelWorksheet toFormatWs)
+    {
+        var lastRow = toFormatWs.Dimension.End.Row - 1;
+        var lastColumn = toFormatWs.Dimension.End.Column + 1;
+        var columnToSkip = lastColumn - 1;
+
+        var everythingAddedUp = 0D;
+        for (var row = 4; row <= lastRow; row++)
+        {
+            if (row == lastRow)
+            {
+                toFormatWs.Cells[lastRow, lastColumn].Value = everythingAddedUp;
+                break;
+            }
+
+            var addedUpPrimaryData = 0D;
+            for (var column = 2; column <= lastColumn; column++)
+            {
+                if (column == columnToSkip)
+                {
+                    continue;
+                }
+
+                if (column == lastColumn)
+                {
+                    toFormatWs.Cells[row, column].Value = addedUpPrimaryData;
+                    break;
+                }
+
+                var cellValue = toFormatWs.Cells[row, column].Value?.ToString()??string.Empty;
+                if (string.IsNullOrWhiteSpace(cellValue))
+                {
+                    throw new UnexpectedValueException($"TvcbClass.CalculateAddedUpData | Detected an empty string in the cell | row: {row} column: {column}");
+                }
+
+                if (!double.TryParse(cellValue, out var parsedCellValue))
+                {
+                    throw new UnexpectedValueException($"TvcbClass.CalculateAddedUpData | Detected a non-numeric value in the cell | row: {row} column: {column}");
+                }
+
+                addedUpPrimaryData += parsedCellValue;
+            }
+
+            everythingAddedUp += addedUpPrimaryData;
+        }
+
+        return everythingAddedUp;
+    }
+
+    public static void CheckForMatchingResults(ExcelWorksheet toFormatWs, double addedUpRowData, double addedUpColumnData)
+    {
+        var lastRow = toFormatWs.Dimension.End.Row;
+        var lastColumn = toFormatWs.Dimension.End.Column;
+
+        var cellFill = toFormatWs.Cells[lastRow, lastColumn].Style.Fill;
+        cellFill.PatternType = ExcelFillStyle.Solid;
+
+        cellFill.BackgroundColor.SetColor((int)addedUpRowData == (int)addedUpColumnData ? Color.Green : Color.Red);
     }
 
     public static void GenerateChart(ExcelWorksheet genWs, ExcelWorksheet toFormatWs)
@@ -290,8 +395,18 @@ public static class TvcbClass
         toFormatWs.Cells["1:3"].Style.Font.Bold = true;
         toFormatWs.Cells["A:A"].Style.Font.Bold = true;
 
+        var lastRow = toFormatWs.Dimension.End.Row;
+        var lastColumn = toFormatWs.Dimension.End.Column - 1;
+
+        for (var row = 1; row < lastRow; row++)
+        {
+            HelperFunctions.BorderAround(toFormatWs, row, lastColumn);
+        }
+
+        for (var column = 1; column < lastColumn; column++)
+        {
+            HelperFunctions.BorderAround(toFormatWs, lastRow, column);
+        }
+
     }
-
-
-
 }
