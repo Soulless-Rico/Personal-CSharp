@@ -13,7 +13,13 @@ public static class HelperFunctions
 
     public static void BorderAround(ExcelWorksheet ws, string cellCode)
     {
-        var border = ws.Cells[cellCode].Style.Border;
+        var cellData = ws.Cells[cellCode];
+        BorderAround(ws, cellData.Start.Row, cellData.Start.Column);
+    }
+
+    public static void BorderAround(ExcelWorksheet ws, int cellRow, int cellColumn)
+    {
+        var border = ws.Cells[cellRow, cellColumn].Style.Border;
 
         border.Bottom.Style = ExcelBorderStyle.Thin;
         border.Bottom.Color.SetColor(Color.Black);
