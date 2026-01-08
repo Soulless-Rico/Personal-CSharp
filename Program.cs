@@ -8,12 +8,14 @@ public static class Formatter
 {
     public static void Main()
     {
+        // Preparation
         Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] ----- Program Started -----");
 
         var (toFormatExcelFilePath, generatedExcelFilePath) = ExcelFileEntry.LoadSelectedFiles();
         using var genPackage = new ExcelPackage(new FileInfo(generatedExcelFilePath));
         using var toFormatPackage = new ExcelPackage(new FileInfo(toFormatExcelFilePath));
 
+        // Basic Directions
         BasicDirectionsClass.DefaultData(genPackage.Workbook.Worksheets[0], toFormatPackage.Workbook.Worksheets[0]);
 
         var directions = BasicDirectionsClass.FindAllDirections(genPackage);
@@ -22,18 +24,29 @@ public static class Formatter
             BasicDirectionsClass.BasicDirections(direction, genPackage, toFormatPackage);
         }
 
-        var genWs =  TvcbClass.FindCorrectWorksheet(genPackage);
-        var toFormatWs =  TvcbClass.Prepare(toFormatPackage);
+        // Total Intensity Rundown
+        var genWs =  TirClass.FindCorrectWorksheet(genPackage);
+        var toFormatWs =  TirClass.Prepare(toFormatPackage);
 
+        TirClass.FormatMeasuredTime(genWs, toFormatWs);
+        var totalVehicleCategoryCount = TirClass.FormatVehicleCategories(genWs, toFormatWs);
+
+        var tvcbPrimaryDataMapping = TirClass.ReadPrimaryData(genPackage, toFormatPackage);
+        TirClass.WritePrimaryData(tvcbPrimaryDataMapping, toFormatWs);
+
+        var addedUpRowData = TirClass.CalculateAddedUpRowData(toFormatWs);
+        var addedUpColumnData = TirClass.CalculateAddedUpColumnData(toFormatWs);
+
+        TirClass.CheckForMatchingResults(toFormatWs, addedUpRowData, addedUpColumnData);
+        TirClass.Styling(toFormatWs);
+
+        // Total Volume Class Breakdown
+        toFormatWs = TvcbClass.Prepare(toFormatPackage);
+        genWs = TvcbClass.FindCorrectWorksheet(genPackage);
         TvcbClass.FormatMeasuredTime(genWs, toFormatWs);
-        TvcbClass.FormatVehicleCategories(genWs, toFormatWs);
-        var tvcbPrimaryDataMapping = TvcbClass.ReadPrimaryData(genPackage, toFormatPackage);
-        TvcbClass.WritePrimaryData(tvcbPrimaryDataMapping, toFormatWs);
-        var addedUpRowData = TvcbClass.CalculateAddedUpRowData(toFormatWs);
-        var addedUpColumnData = TvcbClass.CalculateAddedUpColumnData(toFormatWs);
-        TvcbClass.CheckForMatchingResults(toFormatWs, addedUpRowData, addedUpColumnData);
-        TvcbClass.Styling(toFormatWs);
+        TvcbClass.PrimaryDataReading(genWs, directions, totalVehicleCategoryCount);
 
+        // Program End
         toFormatPackage.Save();
         Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] ----- Program Finished -----]");
     }
