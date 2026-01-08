@@ -6,8 +6,8 @@ using OfficeOpenXml.Style;
 
 namespace ExcelFormatterConsole.Formatting;
 
-public static class TvcbClass
-// Total Volume Class Breakdown
+public static class TirClass
+// Total Intensity Rundown
 {
     private const string ToFormatWorksheetName = "Celkový priebeh intenzít";
 
@@ -79,14 +79,14 @@ public static class TvcbClass
 
     public static ExcelWorksheet FindCorrectWorksheet(ExcelPackage genPackage)
     {
-        var passedWorksheet = genPackage.Workbook.Worksheets.FirstOrDefault(worksheet => worksheet.Index > 3 && worksheet.Name.Equals("total volume class breakdown", StringComparison.OrdinalIgnoreCase))!;
-        return passedWorksheet == null! ?
-            throw new MissingWorksheetException("TvcbClass.FindCorrectWorksheet() | Failed to find usable worksheet.") : passedWorksheet;
+        var eppWorksheet = genPackage.Workbook.Worksheets.FirstOrDefault(worksheet => worksheet.Index > 3 && worksheet.Name.Equals("total volume class breakdown", StringComparison.OrdinalIgnoreCase));
+        return eppWorksheet ?? throw new MissingWorksheetException("TirClass.FindCorrectWorksheet() | Failed to find usable worksheet.");
     }
 
     public static ExcelWorksheet Prepare(ExcelPackage toFormatPackage)
     {
         var toFormatWs = toFormatPackage.Workbook.Worksheets.Add(ToFormatWorksheetName);
+        TimedLog($" {toFormatWs.Name} | Created worksheet.");
 
         toFormatWs.Cells["A1:A3"].Merge = true;
         toFormatWs.Cells["A1"].Value = "Čas";
@@ -135,10 +135,12 @@ public static class TvcbClass
             var correctCellRow = row - 1;
             toFormatWs.Cells["A" + correctCellRow].Value = $"{dtCellValue:HH:mm} - {dtNextCellValue:HH:mm}";
         }
+
+        TimedLog($"{toFormatWs.Name} | Applied date formatting.");
     }
 
 
-    public static void FormatVehicleCategories(ExcelWorksheet genWs, ExcelWorksheet toFormatWs)
+    public static int FormatVehicleCategories(ExcelWorksheet genWs, ExcelWorksheet toFormatWs)
     {
         List<string> vehicleCategoryTranslations = [];
 
@@ -162,6 +164,9 @@ public static class TvcbClass
             toFormatWs.Cells[1, column].Value = translation;
             toFormatWs.Cells[1, column, 3, column].Merge = true;
         }
+
+        TimedLog($"{toFormatWs.Name} | Applied vehicle category formatting.");
+        return vehicleCategoryTranslations.Count;
     }
 
     public static Dictionary<string, Dictionary<string, double>> ReadPrimaryData(ExcelPackage genPackage, ExcelPackage toFormatPackage)
@@ -176,7 +181,7 @@ public static class TvcbClass
             for (var row = 4; row <= lastRow; row++)
             {
                 var lastColumn = ws.Dimension.End.Column;
-                string cleanedDate = string.Empty;
+                var cleanedDate = string.Empty;
                 for (var column = 1; column <= lastColumn; column++)
                 {
                     if (column == 1)
@@ -186,7 +191,7 @@ public static class TvcbClass
                         {
                             if (!DateTime.TryParse(dateKey, out var parsedDate))
                             {
-                                throw new DateTimeConversionException("TvcbClass.ReadPrimaryData | Failed to convert into a DateTime object to be used as the first dictionary key.");
+                                throw new DateTimeConversionException("TirClass.ReadPrimaryData | Failed to convert into a DateTime object to be used as the first dictionary key.");
                             }
 
                             cleanedDate = $"{parsedDate:HH:mm}";
@@ -207,12 +212,12 @@ public static class TvcbClass
                         var category = ws.Cells[categoriesRow, column].Value?.ToString()??string.Empty;
                         if (string.IsNullOrWhiteSpace(category) || !ViableVehicleCategories.Contains(category))
                         {
-                            throw new CategoryMatchException("TvcbClass.ReadPrimaryData | No valid category was found to be used as the second dictionary key.");
+                            throw new CategoryMatchException("TirClass.ReadPrimaryData | No valid category was found to be used as the second dictionary key.");
                         }
 
                         if (!VehicleCategoryTranslations.TryGetValue(category, out var translatedCategory))
                         {
-                            throw new CategoryMatchException($"TvcbClass.ReadPrimaryData | No translation found for the category '{category}'.");
+                            throw new CategoryMatchException($"TirClass.ReadPrimaryData | No translation found for the category '{category}'.");
                         }
 
                         var cellValue = ws.Cells[row, column].Value?.ToString()??string.Empty;
@@ -223,7 +228,7 @@ public static class TvcbClass
 
                         if (!double.TryParse(cellValue, out var parsedCellValue))
                         {
-                            throw new PrimaryDataValueException($"TvcbClass.ReadPrimaryData | Found an incorrect value: '{cellValue}' | row: {row} column: {column}.");
+                            throw new PrimaryDataValueException($"TirClass.ReadPrimaryData | Found an incorrect value: '{cellValue}' | row: {row} column: {column}.");
                         }
 
                         if (primaryDataMapping[cleanedDate].ContainsKey(translatedCategory))
@@ -239,6 +244,7 @@ public static class TvcbClass
             }
         }
 
+        TimedLog($"{genPackage.File.Name} | Read primary data from all directions.");
         return primaryDataMapping;
     }
 
@@ -254,7 +260,7 @@ public static class TvcbClass
 
             if (string.IsNullOrWhiteSpace(date) || date.Length > 5)
             {
-                throw new UnexpectedValueException($"TvcbClass.WritePrimaryData | Encountered an unexpected value in the place of the date: '{date}'.");
+                throw new UnexpectedValueException($"TirClass.WritePrimaryData | Encountered an unexpected value in the place of the date: '{date}'.");
             }
 
             var lastColumn = toFormatWs.Dimension.End.Column;
@@ -264,13 +270,14 @@ public static class TvcbClass
 
                 if (string.IsNullOrWhiteSpace(category) || string.IsNullOrWhiteSpace(date))
                 {
-                    throw new UnexpectedValueException($"TvcbClass.WritePrimaryData | Encountered an unexpected value in the place of the category: '{category}'.");
+                    throw new UnexpectedValueException($"TirClass.WritePrimaryData | Encountered an unexpected value in the place of the category: '{category}'.");
                 }
 
                 toFormatWs.Cells[row, column].Value = primaryDataMapping[date][category];
             }
         }
 
+        TimedLog($"{toFormatWs.Name} | Wrote all primary data.");
     }
 
     public static double CalculateAddedUpRowData(ExcelWorksheet toFormatWs)
@@ -305,12 +312,12 @@ public static class TvcbClass
                 var cellValue = toFormatWs.Cells[row, column].Value?.ToString()??string.Empty;
                 if (string.IsNullOrWhiteSpace(cellValue))
                 {
-                    throw new UnexpectedValueException($"TvcbClass.CalculateAddedUpData | Detected an empty string in the cell | row: {row} column: {column}");
+                    throw new UnexpectedValueException($"TirClass.CalculateAddedUpData | Detected an empty string in the cell | row: {row} column: {column}");
                 }
 
                 if (!double.TryParse(cellValue, out var parsedCellValue))
                 {
-                    throw new UnexpectedValueException($"TvcbClass.CalculateAddedUpData | Detected a non-numeric value in the cell | row: {row} column: {column}");
+                    throw new UnexpectedValueException($"TirClass.CalculateAddedUpData | Detected a non-numeric value in the cell | row: {row} column: {column}");
                 }
 
                 addedUpPrimaryData += parsedCellValue;
@@ -319,6 +326,7 @@ public static class TvcbClass
             everythingAddedUp += addedUpPrimaryData;
         }
 
+        TimedLog($"{toFormatWs.Name} | Calculated added up row data.");
         return everythingAddedUp;
     }
 
@@ -354,12 +362,12 @@ public static class TvcbClass
                 var cellValue = toFormatWs.Cells[row, column].Value?.ToString()??string.Empty;
                 if (string.IsNullOrWhiteSpace(cellValue))
                 {
-                    throw new UnexpectedValueException($"TvcbClass.CalculateAddedUpData | Detected an empty string in the cell | row: {row} column: {column}");
+                    throw new UnexpectedValueException($"TirClass.CalculateAddedUpData | Detected an empty string in the cell | row: {row} column: {column}");
                 }
 
                 if (!double.TryParse(cellValue, out var parsedCellValue))
                 {
-                    throw new UnexpectedValueException($"TvcbClass.CalculateAddedUpData | Detected a non-numeric value in the cell | row: {row} column: {column}");
+                    throw new UnexpectedValueException($"TirClass.CalculateAddedUpData | Detected a non-numeric value in the cell | row: {row} column: {column}");
                 }
 
                 addedUpPrimaryData += parsedCellValue;
@@ -368,6 +376,7 @@ public static class TvcbClass
             everythingAddedUp += addedUpPrimaryData;
         }
 
+        TimedLog($"{toFormatWs.Name} | Calculated added up column data.");
         return everythingAddedUp;
     }
 
@@ -380,12 +389,33 @@ public static class TvcbClass
         cellFill.PatternType = ExcelFillStyle.Solid;
 
         cellFill.BackgroundColor.SetColor((int)addedUpRowData == (int)addedUpColumnData ? Color.Green : Color.Red);
+        TimedLog($"{toFormatWs.Name} | Performed a value check.");
     }
 
-    public static void GenerateChart(ExcelWorksheet genWs, ExcelWorksheet toFormatWs)
+
+    /*
+     public static void GenerateChart(ExcelPackage toFormatPackage)
     {
+        using var stream = new MemoryStream();
 
+        toFormatPackage.SaveAs(stream);
+        stream.Position = 0;
+
+        using XLWorkbook workbook = new XLWorkbook(stream);
+
+        var ws = workbook.Worksheets.FirstOrDefault(worksheet => worksheet.Position > 3 && worksheet.Name.Equals("total volume class breakdown", StringComparison.OrdinalIgnoreCase));
+        if (ws == null)
+        {
+            throw new MissingWorksheetException("TirClass.FindCorrectWorksheet() | Failed to find usable worksheet.");
+        }
+
+        var lastRow = ws.LastRowUsed().RowNumber() - 2;
+        var lastColumn = ws.LastColumnUsed().ColumnNumber() - 2;
+
+        var chart = ws
     }
+    */
+
 
     public static void Styling(ExcelWorksheet toFormatWs)
     {
@@ -408,5 +438,17 @@ public static class TvcbClass
             HelperFunctions.BorderAround(toFormatWs, lastRow, column);
         }
 
+        lastColumn -= 2;
+        lastRow -= 2;
+
+        for (var column = 1; column <= lastColumn; column++)
+        {
+            for (var row = 1; row <= lastRow; row++)
+            {
+                HelperFunctions.BorderAround(toFormatWs, row, column);
+            }
+        }
+
+        TimedLog($"{toFormatWs.Name} | Styled worksheet.");
     }
 }
