@@ -142,3 +142,20 @@ public class UnexpectedValueException : Exception
     {
     }
 }
+public class UnassignedVariableException : Exception
+{
+    public UnassignedVariableException()
+        : base("Encountered an empty, uninitialized or null value.")
+    {
+    }
+
+    public UnassignedVariableException(string exceptionMsg)
+        : base(exceptionMsg)
+    {
+    }
+
+    public UnassignedVariableException(string exceptionMsg, Exception exception)
+        : base($"Exception Message | {exceptionMsg} \nException | {exception}")
+    {
+    }
+}
