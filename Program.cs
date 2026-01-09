@@ -31,8 +31,8 @@ public static class Formatter
         TirClass.FormatMeasuredTime(genWs, toFormatWs);
         var totalVehicleCategoryCount = TirClass.FormatVehicleCategories(genWs, toFormatWs);
 
-        var tvcbPrimaryDataMapping = TirClass.ReadPrimaryData(genPackage, toFormatPackage);
-        TirClass.WritePrimaryData(tvcbPrimaryDataMapping, toFormatWs);
+        var tirPrimaryDataMapping = TirClass.ReadPrimaryData(genPackage, toFormatPackage);
+        TirClass.WritePrimaryData(tirPrimaryDataMapping, toFormatWs);
 
         var addedUpRowData = TirClass.CalculateAddedUpRowData(toFormatWs);
         var addedUpColumnData = TirClass.CalculateAddedUpColumnData(toFormatWs);
@@ -44,7 +44,6 @@ public static class Formatter
         toFormatWs = TvcbClass.Prepare(toFormatPackage);
         genWs = TvcbClass.FindCorrectWorksheet(genPackage);
         TvcbClass.FormatMeasuredTime(genWs, toFormatWs);
-        TvcbClass.PrimaryDataReading(genWs, directions, totalVehicleCategoryCount);
 
         // Program End
         toFormatPackage.Save();
