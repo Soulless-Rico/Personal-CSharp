@@ -9,6 +9,24 @@ public class TvcbClass
 {
     private static readonly Stopwatch Stopwatch = Stopwatch.StartNew();
 
+    private static readonly Dictionary<string, string> DirectionTranslations = new (StringComparer.OrdinalIgnoreCase)
+    {
+        { "right", "doprava" },
+        { "left", "dolava" },
+        { "thru", "priamo" },
+        { "u-turn", "otočenie" },
+
+        { "hard right", "prudko doprava" },
+        { "hard left", "prudko doľava" },
+        { "slight right", "mierne doprava" },
+        { "slight left", "mierne doľava" },
+        { "bear right", "mierne doprava" },
+        { "bear left", "mierne doľava" },
+
+        { "app total", "spolu"},
+        {"int total", "celkom"}
+    };
+
     private static void TimedLog(string logMessage)
     {
         Stopwatch.Stop();
@@ -24,10 +42,7 @@ public class TvcbClass
 
     public static ExcelWorksheet Prepare(ExcelPackage toFormatPackage)
     {
-        var toFormatWs = toFormatPackage.Workbook.Worksheets.Add("Celkové údaje 12hod");
-        toFormatWs.Cells.AutoFitColumns();
-
-        return toFormatWs;
+        return toFormatPackage.Workbook.Worksheets.Add("Celkové údaje 12hod");
     }
 
     public static void FormatMeasuredTime(ExcelWorksheet genWs, ExcelWorksheet toFormatWs)
@@ -75,9 +90,81 @@ public class TvcbClass
         TimedLog($"{toFormatWs.Name} | Applied date formatting.");
     }
 
-    public static void Navigation()
+    public static void Navigation(ExcelWorksheet genWs, ExcelWorksheet toFormatWs, int directionsAmount)
     {
+        toFormatWs.Cells["A1"].Value = "Smer od";
+        toFormatWs.Cells["A2"].Value = "Orientácia";
+        toFormatWs.Cells["A3"].Value = "Čas";
 
+        var lastColumn = genWs.Dimension.End.Column;
+        HashSet<string> allDirections = [];
+        var fullDirectionAddresses = new Dictionary<string, string>();
+
+        var row = 3;
+        for (var column = 2; column <= lastColumn; column++)
+        {
+            var cellValue = genWs.Cells[row, column].Value?.ToString() ?? throw new UnexpectedValueException($"TvcbClass.Navigation | Unexpected null value detected | row={row} column={column}");
+            if (!DirectionTranslations.TryGetValue(cellValue, out var directionTranslation))
+            {
+                HelperFunctions.ErrorLog($"TvcbClass.Navigation | Could not find valid translation for set direction | direction='{cellValue}'");
+            }
+
+            allDirections.Add(directionTranslation ?? cellValue);
+
+            toFormatWs.Cells[row, column].Value = directionTranslation ?? cellValue;
+        }
+
+        row = 2;
+
+        for (var column = 2; column <= lastColumn; column++)
+        {
+            toFormatWs.Cells[row, column].Value = "X - X";
+        }
+
+        row = 1;
+
+        var specificRow = 3;
+        var targetNumber = 1;
+
+        while (targetNumber <=  directionsAmount)
+        {
+            for (var column = 2; column <= lastColumn; column++)
+            {
+                var cellValue = toFormatWs.Cells[specificRow, column].Value?.ToString() ?? throw new UnexpectedValueException($"TvcbClass.Navigation | Detected an unexpected null value | row={row} column={column}");
+
+                if (cellValue.ToLower().Trim() != "doprava")
+                {
+                    continue;
+                }
+
+                cellValue = genWs.Cells[row, column].Value?.ToString() ?? throw new UnexpectedValueException($"TvcbClass.Navigation | Detected an unexpected null value | row={row} column={column}");
+
+                var directionNumber = cellValue.Split("-")[0].Trim();
+                if (!int.TryParse(directionNumber, out var verifiedNumber))
+                {
+                    continue;
+                }
+
+                var uncountedDirection = 1;
+                var additionalOffset = 1;
+                if (targetNumber == verifiedNumber)
+                {
+                    var fullAddress = ExcelCellBase.GetAddress(row, 1 + targetNumber * (allDirections.Count - uncountedDirection) - (allDirections.Count - uncountedDirection - additionalOffset));
+
+                    toFormatWs.Cells[fullAddress].Value = cellValue;
+                    targetNumber++;
+                }
+
+                try
+                {
+                    toFormatWs.Cells[row, column, row, column + allDirections.Count - 2].Merge = true;
+                }
+                catch (Exception)
+                {
+                    HelperFunctions.ErrorLog($"Failed to merge columns [{column} - {column + allDirections.Count}]");
+                }
+            }
+        }
     }
 
     public static void SecondaryNavigation()
@@ -93,5 +180,10 @@ public class TvcbClass
     public static void PrimaryDataWriting()
     {
 
+    }
+
+    public static void Style(ExcelWorksheet toFormatWs)
+    {
+        toFormatWs.Cells.AutoFitColumns();
     }
 }
