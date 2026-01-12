@@ -44,6 +44,8 @@ public static class Formatter
         toFormatWs = TvcbClass.Prepare(toFormatPackage);
         genWs = TvcbClass.FindCorrectWorksheet(genPackage);
         TvcbClass.FormatMeasuredTime(genWs, toFormatWs);
+        TvcbClass.Navigation(genWs, toFormatWs, directions);
+        TvcbClass.Style(toFormatWs);
 
         // Program End
         toFormatPackage.Save();
