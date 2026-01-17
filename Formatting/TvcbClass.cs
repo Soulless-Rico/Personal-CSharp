@@ -36,7 +36,7 @@ public class TvcbClass
 
     public static ExcelWorksheet FindCorrectWorksheet(ExcelPackage genPackage)
     {
-        var genWs = genPackage.Workbook.Worksheets.FirstOrDefault(ws => ws.Index > 4 || ws.Name.ToLower() == "total volume class breakdown");
+        var genWs = genPackage.Workbook.Worksheets.FirstOrDefault(ws => ws.Index > 4 && ws.Name.ToLower() == "total volume class breakdown");
         return genWs ?? throw new MissingWorksheetException($"TvcbClass.FindCorrectWorksheet | Failed to find correct worksheet. | Checked file name: '{genPackage.File.Name}'.");
     }
 
@@ -90,80 +90,104 @@ public class TvcbClass
         TimedLog($"{toFormatWs.Name} | Applied date formatting.");
     }
 
-    public static void Navigation(ExcelWorksheet genWs, ExcelWorksheet toFormatWs, int directionsAmount)
+    public static void Navigation(ExcelWorksheet genWs, ExcelWorksheet toFormatWs)
     {
         toFormatWs.Cells["A1"].Value = "Smer od";
         toFormatWs.Cells["A2"].Value = "Orientácia";
         toFormatWs.Cells["A3"].Value = "Čas";
 
         var lastColumn = genWs.Dimension.End.Column;
-        HashSet<string> allDirections = [];
-        var fullDirectionAddresses = new Dictionary<string, string>();
+        var lastRow = genWs.Dimension.End.Row;
+        var targetValue = 1;
+        var column = 2;
 
-        var row = 3;
-        for (var column = 2; column <= lastColumn; column++)
+        List<List<string>> listOfAllData = [];
+        while (column <= 1000)
         {
-            var cellValue = genWs.Cells[row, column].Value?.ToString() ?? throw new UnexpectedValueException($"TvcbClass.Navigation | Unexpected null value detected | row={row} column={column}");
-            if (!DirectionTranslations.TryGetValue(cellValue, out var directionTranslation))
+            var cellValue = genWs.Cells[1, column].Value?.ToString() ?? "";
+            if (!int.TryParse(cellValue.Split("-")[0].Trim(), out var intValue) || intValue != targetValue)
             {
-                HelperFunctions.ErrorLog($"TvcbClass.Navigation | Could not find valid translation for set direction | direction='{cellValue}'");
+                column++;
+                continue;
             }
 
-            allDirections.Add(directionTranslation ?? cellValue);
+            targetValue++;
 
-            toFormatWs.Cells[row, column].Value = directionTranslation ?? cellValue;
-        }
-
-        row = 2;
-
-        for (var column = 2; column <= lastColumn; column++)
-        {
-            toFormatWs.Cells[row, column].Value = "X - X";
-        }
-
-        row = 1;
-
-        var specificRow = 3;
-        var targetNumber = 1;
-
-        while (targetNumber <=  directionsAmount)
-        {
-            for (var column = 2; column <= lastColumn; column++)
+            List<string> setColumnData = [];
+            for (var row = 1; row <= lastRow; row++)
             {
-                var cellValue = toFormatWs.Cells[specificRow, column].Value?.ToString() ?? throw new UnexpectedValueException($"TvcbClass.Navigation | Detected an unexpected null value | row={row} column={column}");
-
-                if (cellValue.ToLower().Trim() != "doprava")
+                var detectedKeywordAmount = 0;
+                var detectedCheckWordAmount = 0;
+                for (var innerColumn = column; innerColumn <= lastColumn; innerColumn++)
                 {
-                    continue;
+                    switch (row)
+                    {
+                        case 1 or 2:
+                            var checkWord = genWs.Cells[3, column].Value?.ToString() ?? "";
+                            if (string.IsNullOrWhiteSpace(checkWord))
+                            {
+                                HelperFunctions.ErrorLog("checkWord is null or empty");
+                                continue;
+                            }
+
+                            if (checkWord.ToLower() != "right" || detectedCheckWordAmount >= 1)
+                            {
+                                continue;
+                            }
+
+                            detectedCheckWordAmount++;
+
+                            var directionName = genWs.Cells[row, column].Value?.ToString() ?? "";
+                            if (string.IsNullOrWhiteSpace(directionName))
+                            {
+                                HelperFunctions.ErrorLog("direction name is null or empty");
+                                continue;
+                            }
+
+                            var fullMergedRange = genWs.MergedCells[1, column];
+                            toFormatWs.Cells[fullMergedRange].Merge = true;
+
+                            setColumnData.Add(directionName);
+                            break;
+                        case 3:
+                            break;
+                        default:
+                            var keyword = genWs.Cells[3, innerColumn].Value?.ToString() ?? "";
+                            if (string.IsNullOrWhiteSpace(keyword))
+                            {
+                                HelperFunctions.ErrorLog("keyword value is null or empty");
+                                continue;
+                            }
+
+                            if (keyword.ToLower() == "right")
+                            {
+                                detectedKeywordAmount++;
+                            }
+                            // not working correctly
+                            else if (detectedKeywordAmount > 1)
+                            {
+                                detectedKeywordAmount = 0;
+                                setColumnData.Add("columnEnd");
+                                goto endOfRow;
+                            }
+
+                            cellValue = genWs.Cells[row, innerColumn].Value?.ToString() ?? "";
+                            if (string.IsNullOrWhiteSpace(cellValue) || !double.TryParse(cellValue, out _))
+                            {
+                                HelperFunctions.ErrorLog($"cell value is null, empty or a non-numeric value | cellValue='{cellValue}'");
+                                continue;
+                            }
+
+                            setColumnData.Add(cellValue);
+                            break;
+                    }
                 }
 
-                cellValue = genWs.Cells[row, column].Value?.ToString() ?? throw new UnexpectedValueException($"TvcbClass.Navigation | Detected an unexpected null value | row={row} column={column}");
-
-                var directionNumber = cellValue.Split("-")[0].Trim();
-                if (!int.TryParse(directionNumber, out var verifiedNumber))
-                {
-                    continue;
-                }
-
-                var uncountedDirection = 1;
-                var additionalOffset = 1;
-                if (targetNumber == verifiedNumber)
-                {
-                    var fullAddress = ExcelCellBase.GetAddress(row, 1 + targetNumber * (allDirections.Count - uncountedDirection) - (allDirections.Count - uncountedDirection - additionalOffset));
-
-                    toFormatWs.Cells[fullAddress].Value = cellValue;
-                    targetNumber++;
-                }
-
-                try
-                {
-                    toFormatWs.Cells[row, column, row, column + allDirections.Count - 2].Merge = true;
-                }
-                catch (Exception)
-                {
-                    HelperFunctions.ErrorLog($"Failed to merge columns [{column} - {column + allDirections.Count}]");
-                }
+                endOfRow: ;
             }
+
+            listOfAllData.Add(setColumnData);
+            column = 2;
         }
     }
 
