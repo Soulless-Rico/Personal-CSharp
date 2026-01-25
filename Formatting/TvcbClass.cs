@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using ExcelFormatterConsole.Utility;
 using OfficeOpenXml;
+using OfficeOpenXml.Style;
 
 namespace ExcelFormatterConsole.Formatting;
 
@@ -33,6 +34,18 @@ public class TvcbClass
         Console.WriteLine($"[{Stopwatch.Elapsed.TotalMilliseconds} ms] ----- {logMessage} -----");
         Stopwatch.Restart();
     }
+
+    private static readonly Dictionary<string, string> VehicleCategoryTranslations = new(StringComparer.OrdinalIgnoreCase)
+    {
+        {"motorcycles", "M"},
+        {"lights", "LV"},
+        {"single-unit trucks", "NV"},
+        {"articulated trucks", "TNV"},
+        {"buses", "A"},
+        {"bicycles on road", "B"},
+        {"articulated buses", "AK"},
+        {"pedestrians", "CH"},
+    };
 
     public static ExcelWorksheet FindCorrectWorksheet(ExcelPackage genPackage)
     {
@@ -90,7 +103,7 @@ public class TvcbClass
         TimedLog($"{toFormatWs.Name} | Applied date formatting.");
     }
 
-    public static void Navigation(ExcelWorksheet genWs, ExcelWorksheet toFormatWs)
+    public static List<List<string>> PrimaryDataReading(ExcelWorksheet genWs, ExcelWorksheet toFormatWs)
     {
         toFormatWs.Cells["A1"].Value = "Smer od";
         toFormatWs.Cells["A2"].Value = "Orientácia";
@@ -114,6 +127,7 @@ public class TvcbClass
             targetValue++;
 
             List<string> setColumnData = [];
+            List<string> lastColumnData = [];
             for (var row = 1; row <= lastRow; row++)
             {
                 var detectedKeywordAmount = 0;
@@ -163,8 +177,8 @@ public class TvcbClass
                             {
                                 detectedKeywordAmount++;
                             }
-                            // not working correctly
-                            else if (detectedKeywordAmount > 1)
+
+                            if (detectedKeywordAmount > 1)
                             {
                                 detectedKeywordAmount = 0;
                                 setColumnData.Add("columnEnd");
@@ -175,7 +189,13 @@ public class TvcbClass
                             if (string.IsNullOrWhiteSpace(cellValue) || !double.TryParse(cellValue, out _))
                             {
                                 HelperFunctions.ErrorLog($"cell value is null, empty or a non-numeric value | cellValue='{cellValue}'");
-                                continue;
+                            }
+
+                            if (keyword.ToLower() == "int total")
+                            {
+                                setColumnData.Add("columnEnd");
+                                lastColumnData.Add(cellValue);
+                                goto endOfRow;
                             }
 
                             setColumnData.Add(cellValue);
@@ -189,25 +209,91 @@ public class TvcbClass
             listOfAllData.Add(setColumnData);
             column = 2;
         }
+
+        return listOfAllData;
     }
 
-    public static void SecondaryNavigation()
+    public static void PrimaryDataWriting(ExcelWorksheet genWs, ExcelWorksheet toFormatWs, List<List<string>> listsOfAllData)
     {
+        var lastRow = genWs.Dimension.End.Row;
+        var lastColumn = genWs.Dimension.End.Column;
 
+        var spaceBetweenDataColumn = 2;
+        foreach (var dataList in listsOfAllData)
+        {
+            var listIndex = 0;
+            for (var row = 1; row <= lastRow; row++)
+            {
+                if (row == 2) continue;
+
+                for (var column = spaceBetweenDataColumn; column <= lastColumn; column++, listIndex++)
+                {
+                    var data = dataList[listIndex];
+                    if (data == "columnEnd")
+                    {
+                        goto endOfRow;
+                    }
+
+                    if (!decimal.TryParse(data ,out var decimalData))
+                    {
+                        HelperFunctions.ErrorLog("Couldn't parse into a decimal value");
+                        continue;
+                    }
+
+                    Console.WriteLine($"value '{data}' added to row={row} column={column}");
+                    toFormatWs.Cells[row, column].Value = decimalData;
+                    if (row is 1 or 3)
+                    {
+                        goto endOfRow;
+                    }
+
+                    if (row == lastRow)
+                    {
+                        spaceBetweenDataColumn++;
+                    }
+                }
+
+                endOfRow:
+                listIndex++;
+            }
+        }
     }
 
-    public static void PrimaryDataReading()
+    public static void SecondaryNavigation(ExcelWorksheet toFormatWs, ExcelWorksheet genWs)
     {
+        Dictionary<string, string> secondaryNavigationCategories = new(StringComparer.OrdinalIgnoreCase)
+        {
+            { "grand total", "spolu" },
+            { "% approach", "% pomer na smer" },
+            { "% total", "% celkový pomer" },
+        };
 
+        var lastRow = genWs.Dimension.End.Row;
+        for (var row = 1; row <= lastRow; row++)
+        {
+            var cellValue = genWs.Cells[row, 1].Value?.ToString() ?? "";
+            if (string.IsNullOrWhiteSpace(cellValue))
+                continue;
+
+            if (secondaryNavigationCategories.TryGetValue(cellValue, out var secondaryTranslation))
+            {
+                toFormatWs.Cells[row, 1].Value = secondaryTranslation;
+            }
+
+            if (!VehicleCategoryTranslations.TryGetValue(cellValue, out var translation)) continue;
+            toFormatWs.Cells[row, 1].Value = translation;
+            toFormatWs.Cells[row + 1, 1].Value = $"% {translation}";
+        }
     }
 
-    public static void PrimaryDataWriting()
-    {
-
-    }
 
     public static void Style(ExcelWorksheet toFormatWs)
     {
-        toFormatWs.Cells.AutoFitColumns();
+        toFormatWs.Cells["A:A"].AutoFitColumns();
+        // toFormatWs.Cells["B:XX"].Style.Numberformat.Format = "0.#%"; <-- also needs work
+        // toFormatWs.Cells["B:XX"].AutoFitColumns(); <-- needs some work
+        toFormatWs.Cells.Style.VerticalAlignment = ExcelVerticalAlignment.Center;
+        toFormatWs.Cells.Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
+
     }
 }
