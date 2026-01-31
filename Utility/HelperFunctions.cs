@@ -8,7 +8,16 @@ public static class HelperFunctions
 {
     public static void ErrorLog(string errorMessage)
     {
+        Console.ForegroundColor = ConsoleColor.Red;
         Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] <!> {errorMessage} <!>");
+        Console.ResetColor();
+    }
+
+    public static void WarningLog(string msg)
+    {
+        Console.ForegroundColor = ConsoleColor.Yellow;
+        Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] <?> {msg} <?>");
+        Console.ResetColor();
     }
 
     public static void BorderAround(ExcelWorksheet ws, string cellCode)
