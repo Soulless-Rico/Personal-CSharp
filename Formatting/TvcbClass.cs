@@ -10,24 +10,6 @@ public class TvcbClass
 {
     private static readonly Stopwatch Stopwatch = Stopwatch.StartNew();
 
-    private static readonly Dictionary<string, string> DirectionTranslations = new (StringComparer.OrdinalIgnoreCase)
-    {
-        { "right", "doprava" },
-        { "left", "dolava" },
-        { "thru", "priamo" },
-        { "u-turn", "otočenie" },
-
-        { "hard right", "prudko doprava" },
-        { "hard left", "prudko doľava" },
-        { "slight right", "mierne doprava" },
-        { "slight left", "mierne doľava" },
-        { "bear right", "mierne doprava" },
-        { "bear left", "mierne doľava" },
-
-        { "app total", "spolu"},
-        {"int total", "celkom"}
-    };
-
     private static void TimedLog(string logMessage)
     {
         Stopwatch.Stop();
@@ -49,7 +31,7 @@ public class TvcbClass
 
     public static ExcelWorksheet FindCorrectWorksheet(ExcelPackage genPackage)
     {
-        var genWs = genPackage.Workbook.Worksheets.FirstOrDefault(ws => ws.Index > 4 && ws.Name.ToLower() == "total volume class breakdown");
+        var genWs = genPackage.Workbook.Worksheets.FirstOrDefault(ws => ws.Index >= 4 && ws.Name.ToLower() == "total volume class breakdown");
         return genWs ?? throw new MissingWorksheetException($"TvcbClass.FindCorrectWorksheet | Failed to find correct worksheet. | Checked file name: '{genPackage.File.Name}'.");
     }
 
@@ -128,59 +110,45 @@ public class TvcbClass
 
             List<string> setColumnData = [];
             List<string> lastColumnData = [];
+
+            var dataColumnRange = 0;
             for (var row = 1; row <= lastRow; row++)
             {
-                var detectedKeywordAmount = 0;
                 var detectedCheckWordAmount = 0;
                 for (var innerColumn = column; innerColumn <= lastColumn; innerColumn++)
                 {
                     switch (row)
                     {
-                        case 1 or 2:
-                            var checkWord = genWs.Cells[3, column].Value?.ToString() ?? "";
-                            if (string.IsNullOrWhiteSpace(checkWord))
-                            {
-                                HelperFunctions.ErrorLog("checkWord is null or empty");
-                                continue;
-                            }
-
-                            if (checkWord.ToLower() != "right" || detectedCheckWordAmount >= 1)
-                            {
-                                continue;
-                            }
-
-                            detectedCheckWordAmount++;
+                        case 1:
+                            if (innerColumn != column) continue;
 
                             var directionName = genWs.Cells[row, column].Value?.ToString() ?? "";
                             if (string.IsNullOrWhiteSpace(directionName))
                             {
-                                HelperFunctions.ErrorLog("direction name is null or empty");
+                                HelperFunctions.WarningLog("direction name is null or empty");
                                 continue;
                             }
 
                             var fullMergedRange = genWs.MergedCells[1, column];
                             toFormatWs.Cells[fullMergedRange].Merge = true;
+                            fullMergedRange = genWs.MergedCells[2, column];
+                            toFormatWs.Cells[fullMergedRange].Merge = true;
 
+                            dataColumnRange = new ExcelAddress(fullMergedRange).Columns;
                             setColumnData.Add(directionName);
                             break;
-                        case 3:
-                            break;
+                        case 3 or 2:
+                            continue;
                         default:
                             var keyword = genWs.Cells[3, innerColumn].Value?.ToString() ?? "";
                             if (string.IsNullOrWhiteSpace(keyword))
                             {
-                                HelperFunctions.ErrorLog("keyword value is null or empty");
+                                HelperFunctions.WarningLog("keyword value is null or empty");
                                 continue;
                             }
 
-                            if (keyword.ToLower() == "right")
+                            if (innerColumn >= column + dataColumnRange)
                             {
-                                detectedKeywordAmount++;
-                            }
-
-                            if (detectedKeywordAmount > 1)
-                            {
-                                detectedKeywordAmount = 0;
                                 setColumnData.Add("columnEnd");
                                 goto endOfRow;
                             }
@@ -198,6 +166,14 @@ public class TvcbClass
                                 goto endOfRow;
                             }
 
+                            try
+                            {
+                                Console.WriteLine($"cellValue={cellValue} row={row} column={innerColumn} direction={setColumnData[0]}");
+                            }
+                            catch (Exception e)
+                            {
+                                Console.WriteLine(e);
+                            }
                             setColumnData.Add(cellValue);
                             break;
                     }
@@ -219,42 +195,94 @@ public class TvcbClass
         var lastColumn = genWs.Dimension.End.Column;
 
         var spaceBetweenDataColumn = 2;
+        var leftNumber = 1;
+
         foreach (var dataList in listsOfAllData)
         {
             var listIndex = 0;
             for (var row = 1; row <= lastRow; row++)
             {
-                if (row == 2) continue;
-
-                for (var column = spaceBetweenDataColumn; column <= lastColumn; column++, listIndex++)
+                switch (row)
                 {
-                    var data = dataList[listIndex];
-                    if (data == "columnEnd")
-                    {
-                        goto endOfRow;
-                    }
-
-                    if (!decimal.TryParse(data ,out var decimalData))
-                    {
-                        HelperFunctions.ErrorLog("Couldn't parse into a decimal value");
+                    case 2:
                         continue;
-                    }
+                    case 3:
+                        var mergedRange = toFormatWs.MergedCells[1, 2];
+                        var address = new ExcelAddress(mergedRange);
 
-                    Console.WriteLine($"value '{data}' added to row={row} column={column}");
-                    toFormatWs.Cells[row, column].Value = decimalData;
-                    if (row is 1 or 3)
-                    {
-                        goto endOfRow;
-                    }
 
-                    if (row == lastRow)
-                    {
-                        spaceBetweenDataColumn++;
-                    }
+                        var rightNumber = leftNumber + 1;
+                        var totalDirections = address.Columns;
+
+                        var dataColumnRange = totalDirections;
+                        for (var column = 2; column <= dataColumnRange + 1; column++)
+                        {
+                            var genData = genWs.Cells[row, column].Value?.ToString() ?? "";
+                            if (genData.Contains("peds", StringComparison.InvariantCultureIgnoreCase)) totalDirections--;
+                        }
+
+                        for (var column = spaceBetweenDataColumn; column <= lastColumn; column++)
+                        {
+                            if (rightNumber >= totalDirections)
+                            {
+                                rightNumber = 1;
+                            }
+
+                            if (leftNumber == rightNumber)
+                            {
+                                toFormatWs.Cells[row, column].Value = $"{leftNumber} - {rightNumber}";
+                                toFormatWs.Cells[row, column + 1].Value = "Spolu";
+
+                                var cellValue = toFormatWs.Cells[row + 1, column + 2].Value?.ToString() ?? "";
+                                var cellValueAhead = toFormatWs.Cells[row + 1, column + 3].Value?.ToString() ?? "";
+                                if (double.TryParse(cellValue, out _) || double.TryParse(cellValueAhead, out _)) break;
+
+                                toFormatWs.Cells[row, column + 2].Value = "Peds CW";
+                                toFormatWs.Cells[row, column + 3].Value = "Peds CCW";
+
+                                break;
+                            }
+
+                            toFormatWs.Cells[row, column].Value = $"{leftNumber} - {rightNumber}";
+
+                            rightNumber++;
+                        }
+
+                        leftNumber++;
+                        break;
+                    default:
+                        for (var column = spaceBetweenDataColumn; column <= lastColumn; column++, listIndex++)
+                        {
+                            var data = dataList[listIndex];
+                            if (data == "columnEnd")
+                            {
+                                goto endOfRow;
+                            }
+
+                            if (string.IsNullOrWhiteSpace(data))
+                            {
+                                data = string.Empty;
+                            }
+
+                            if (!decimal.TryParse(data ,out var decimalData) && row > 3)
+                            {
+                                HelperFunctions.WarningLog($"Couldn't parse into a decimal value | row='{row}' column='{column}'");
+                            }
+
+                            toFormatWs.Cells[row, column].Value = decimalData == 0 ? data : decimalData;
+                            if (row is 1)
+                            {
+                                goto endOfRow;
+                            }
+
+                            if (row != lastRow) continue;
+                            spaceBetweenDataColumn++;
+                        }
+                        break;
                 }
 
                 endOfRow:
-                listIndex++;
+                if (row != 3) listIndex++;
             }
         }
     }
