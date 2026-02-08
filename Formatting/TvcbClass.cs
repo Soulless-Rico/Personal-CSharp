@@ -1,4 +1,7 @@
 using System.Diagnostics;
+using System.Drawing;
+using System.Globalization;
+using DocumentFormat.OpenXml.Presentation;
 using ExcelFormatterConsole.Utility;
 using OfficeOpenXml;
 using OfficeOpenXml.Style;
@@ -27,6 +30,42 @@ public class TvcbClass
         {"bicycles on road", "B"},
         {"articulated buses", "AK"},
         {"pedestrians", "CH"},
+    };
+
+    private static readonly Dictionary<string, string> DirectionTranslations = new (StringComparer.OrdinalIgnoreCase)
+    {
+        { "right", "doprava" },
+        { "left", "dolava" },
+        { "thru", "priamo" },
+        { "u-turn", "otočenie" },
+
+        { "hard right", "prudko doprava" },
+        { "hard left", "prudko doľava" },
+        { "slight right", "mierne doprava" },
+        { "slight left", "mierne doľava" },
+        { "bear right", "mierne doprava" },
+        { "bear left", "mierne doľava" },
+        { "app total", "spolu" }
+    };
+
+    private static readonly Dictionary<string, string> WorldDirectionTranslations = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["north"] = "sever",
+        ["north-northeast"] = "sever-severovýchod",
+        ["northeast"] = "severovýchod",
+        ["east-northeast"] = "východ-severovýchod",
+        ["east"] = "východ",
+        ["east-southeast"] = "východ-juhovýchod",
+        ["southeast"] = "juhovýchod",
+        ["south-southeast"] = "juh-juhovýchod",
+        ["south"] = "juh",
+        ["south-southwest"] = "juh-juhozápad",
+        ["southwest"] = "juhozápad",
+        ["west-southwest"] = "západ-juhozápad",
+        ["west"] = "západ",
+        ["west-northwest"] = "západ-severozápad",
+        ["northwest"] = "severozápad",
+        ["north-northwest"] = "sever-severozápad"
     };
 
     public static ExcelWorksheet FindCorrectWorksheet(ExcelPackage genPackage)
@@ -85,7 +124,7 @@ public class TvcbClass
         TimedLog($"{toFormatWs.Name} | Applied date formatting.");
     }
 
-    public static List<List<string>> PrimaryDataReading(ExcelWorksheet genWs, ExcelWorksheet toFormatWs)
+    public static (List<List<string>>, List<int>, List<string>) PrimaryDataReading(ExcelWorksheet genWs, ExcelWorksheet toFormatWs)
     {
         toFormatWs.Cells["A1"].Value = "Smer od";
         toFormatWs.Cells["A2"].Value = "Orientácia";
@@ -97,6 +136,10 @@ public class TvcbClass
         var column = 2;
 
         List<List<string>> listOfAllData = [];
+        List<int> directionColumns = [];
+        List<string> lastColumnData = [];
+        List<string> allDirections = [];
+
         while (column <= 1000)
         {
             var cellValue = genWs.Cells[1, column].Value?.ToString() ?? "";
@@ -107,14 +150,13 @@ public class TvcbClass
             }
 
             targetValue++;
+            directionColumns.Add(column);
 
             List<string> setColumnData = [];
-            List<string> lastColumnData = [];
-
             var dataColumnRange = 0;
+
             for (var row = 1; row <= lastRow; row++)
             {
-                var detectedCheckWordAmount = 0;
                 for (var innerColumn = column; innerColumn <= lastColumn; innerColumn++)
                 {
                     switch (row)
@@ -129,22 +171,43 @@ public class TvcbClass
                                 continue;
                             }
 
-                            var fullMergedRange = genWs.MergedCells[1, column];
-                            toFormatWs.Cells[fullMergedRange].Merge = true;
-                            fullMergedRange = genWs.MergedCells[2, column];
-                            toFormatWs.Cells[fullMergedRange].Merge = true;
-
-                            dataColumnRange = new ExcelAddress(fullMergedRange).Columns;
+                            dataColumnRange = new ExcelAddress(genWs.MergedCells[1, column]).Columns;
                             setColumnData.Add(directionName);
                             break;
-                        case 3 or 2:
-                            continue;
-                        default:
-                            var keyword = genWs.Cells[3, innerColumn].Value?.ToString() ?? "";
-                            if (string.IsNullOrWhiteSpace(keyword))
+                        case 3:
+                            if (innerColumn < column + dataColumnRange)
                             {
-                                HelperFunctions.WarningLog("keyword value is null or empty");
-                                continue;
+                                cellValue = genWs.Cells[row, innerColumn].Value?.ToString() ?? "";
+                                if (string.IsNullOrWhiteSpace(cellValue))
+                                {
+                                    HelperFunctions.WarningLog("Failed to get direction");
+                                    cellValue = "unknown";
+                                }
+
+                                if (cellValue.Contains("int total")) continue;
+
+                                allDirections.Add(cellValue);
+                            }
+
+                            break;
+                        default:
+                            if (row == 2)
+                            {
+                                cellValue = genWs.Cells[row, column].Value?.ToString() ?? "";
+
+                                if (setColumnData.Contains(cellValue))
+                                {
+                                    continue;
+                                }
+                            }
+                            else
+                            {
+                                cellValue = genWs.Cells[row, innerColumn].Value?.ToString() ?? "";
+                            }
+
+                            if (string.IsNullOrWhiteSpace(cellValue) || !double.TryParse(cellValue, out _))
+                            {
+                                HelperFunctions.WarningLog($"cell value is null, empty or a non-numeric value | cellValue='{cellValue}'");
                             }
 
                             if (innerColumn >= column + dataColumnRange)
@@ -153,27 +216,6 @@ public class TvcbClass
                                 goto endOfRow;
                             }
 
-                            cellValue = genWs.Cells[row, innerColumn].Value?.ToString() ?? "";
-                            if (string.IsNullOrWhiteSpace(cellValue) || !double.TryParse(cellValue, out _))
-                            {
-                                HelperFunctions.ErrorLog($"cell value is null, empty or a non-numeric value | cellValue='{cellValue}'");
-                            }
-
-                            if (keyword.ToLower() == "int total")
-                            {
-                                setColumnData.Add("columnEnd");
-                                lastColumnData.Add(cellValue);
-                                goto endOfRow;
-                            }
-
-                            try
-                            {
-                                Console.WriteLine($"cellValue={cellValue} row={row} column={innerColumn} direction={setColumnData[0]}");
-                            }
-                            catch (Exception e)
-                            {
-                                Console.WriteLine(e);
-                            }
                             setColumnData.Add(cellValue);
                             break;
                     }
@@ -186,20 +228,40 @@ public class TvcbClass
             column = 2;
         }
 
-        return listOfAllData;
+        for (var row = 4; row <= lastRow; row++)
+        {
+            var cellValue = genWs.Cells[row, lastColumn].Value?.ToString() ?? "";
+            lastColumnData.Add(cellValue);
+        }
+
+        listOfAllData.Add(lastColumnData);
+        return (listOfAllData, directionColumns, allDirections);
     }
 
-    public static void PrimaryDataWriting(ExcelWorksheet genWs, ExcelWorksheet toFormatWs, List<List<string>> listsOfAllData)
+    public static void PrimaryDataWriting(ExcelWorksheet genWs, ExcelWorksheet toFormatWs, List<List<string>> listsOfAllData, List<int> directionColumns, List<string> allDirections)
     {
         var lastRow = genWs.Dimension.End.Row;
         var lastColumn = genWs.Dimension.End.Column;
 
         var spaceBetweenDataColumn = 2;
-        var leftNumber = 1;
 
+        toFormatWs.Cells[1, lastColumn].Value = "Celkom";
+        toFormatWs.Cells[1, lastColumn, 3, lastColumn].Merge = true;
+
+        var directionColumnListIndex = 0;
         foreach (var dataList in listsOfAllData)
         {
             var listIndex = 0;
+            if (dataList.Equals(listsOfAllData.Last()))
+            {
+                for (var row = 4; row <= lastRow; row++)
+                {
+                    toFormatWs.Cells[row, lastColumn].Value = dataList[listIndex++];
+                }
+                break;
+            }
+
+            var totalDirections = 0;
             for (var row = 1; row <= lastRow; row++)
             {
                 switch (row)
@@ -207,48 +269,32 @@ public class TvcbClass
                     case 2:
                         continue;
                     case 3:
-                        var mergedRange = toFormatWs.MergedCells[1, 2];
+                        var genWsColumn = directionColumns[directionColumnListIndex++];
+
+                        var mergedRange = genWs.MergedCells[1, genWsColumn];
                         var address = new ExcelAddress(mergedRange);
 
-
-                        var rightNumber = leftNumber + 1;
-                        var totalDirections = address.Columns;
+                        totalDirections = address.Columns;
 
                         var dataColumnRange = totalDirections;
-                        for (var column = 2; column <= dataColumnRange + 1; column++)
+                        for (var column = genWsColumn; column <= genWsColumn + dataColumnRange - 1; column++)
                         {
                             var genData = genWs.Cells[row, column].Value?.ToString() ?? "";
                             if (genData.Contains("peds", StringComparison.InvariantCultureIgnoreCase)) totalDirections--;
                         }
 
-                        for (var column = spaceBetweenDataColumn; column <= lastColumn; column++)
+                        var directionIndex = 0;
+                        for (var column = 2; column < lastColumn; column++)
                         {
-                            if (rightNumber >= totalDirections)
+                            if (!DirectionTranslations.TryGetValue(allDirections[directionIndex++], out var translation))
                             {
-                                rightNumber = 1;
+                                HelperFunctions.WarningLog("Couldn't get direction translation");
+                                translation = string.Empty;
                             }
 
-                            if (leftNumber == rightNumber)
-                            {
-                                toFormatWs.Cells[row, column].Value = $"{leftNumber} - {rightNumber}";
-                                toFormatWs.Cells[row, column + 1].Value = "Spolu";
-
-                                var cellValue = toFormatWs.Cells[row + 1, column + 2].Value?.ToString() ?? "";
-                                var cellValueAhead = toFormatWs.Cells[row + 1, column + 3].Value?.ToString() ?? "";
-                                if (double.TryParse(cellValue, out _) || double.TryParse(cellValueAhead, out _)) break;
-
-                                toFormatWs.Cells[row, column + 2].Value = "Peds CW";
-                                toFormatWs.Cells[row, column + 3].Value = "Peds CCW";
-
-                                break;
-                            }
-
-                            toFormatWs.Cells[row, column].Value = $"{leftNumber} - {rightNumber}";
-
-                            rightNumber++;
+                            toFormatWs.Cells[3, column].Value = translation == string.Empty ? allDirections[directionIndex - 1] : translation;
                         }
 
-                        leftNumber++;
                         break;
                     default:
                         for (var column = spaceBetweenDataColumn; column <= lastColumn; column++, listIndex++)
@@ -262,6 +308,25 @@ public class TvcbClass
                             if (string.IsNullOrWhiteSpace(data))
                             {
                                 data = string.Empty;
+                            }
+
+                            if (WorldDirectionTranslations.TryGetValue(data.EndsWith("bound") ? data.Remove(data.Length - 5, 5) : data, out var translation))
+                            {
+                                toFormatWs.Cells[2, column].Value = translation;
+
+                                if (allDirections.Contains("peds cw", StringComparer.OrdinalIgnoreCase) || allDirections.Contains("peds ccw", StringComparer.OrdinalIgnoreCase))
+                                {
+                                    toFormatWs.Cells[1, column, 1, column + totalDirections + 1].Merge = true;
+                                    toFormatWs.Cells[2, column, 2, column + totalDirections + 1].Merge = true;
+                                }
+                                else
+                                {
+                                    toFormatWs.Cells[1, column, 1, column + totalDirections - 1].Merge = true;
+                                    toFormatWs.Cells[2, column, 2, column + totalDirections - 1].Merge = true;
+                                }
+
+                                column--;
+                                continue;
                             }
 
                             if (!decimal.TryParse(data ,out var decimalData) && row > 3)
@@ -317,11 +382,77 @@ public class TvcbClass
 
     public static void Style(ExcelWorksheet toFormatWs)
     {
-        toFormatWs.Cells["A:A"].AutoFitColumns();
-        // toFormatWs.Cells["B:XX"].Style.Numberformat.Format = "0.#%"; <-- also needs work
-        // toFormatWs.Cells["B:XX"].AutoFitColumns(); <-- needs some work
+        var lastRow = toFormatWs.Dimension.End.Row;
+        var lastColumn = toFormatWs.Dimension.Columns;
+
+        for (var row = 1; row <= lastRow; row++)
+        {
+            for (var column = 1; column <= lastColumn; column++)
+            {
+                var cellValue = toFormatWs.Cells[row, 1].Value?.ToString() ?? "";
+                HelperFunctions.BorderAround(toFormatWs, row, column);
+
+                if (string.IsNullOrWhiteSpace(cellValue) || !cellValue.Contains("%")) continue;
+
+                var testValue = toFormatWs.Cells[row, column].Value?.ToString() ?? "";
+                if (!decimal.TryParse(testValue, NumberStyles.Any, CultureInfo.InvariantCulture, out var decimalValue)) continue;
+
+                toFormatWs.Cells[row, column].Value = decimalValue;
+                toFormatWs.Cells[row, column].Style.Numberformat.Format = "0.00%";
+            }
+        }
+
+        var lastColumnRange = toFormatWs.Cells[1, lastColumn, lastRow, lastColumn].Style;
+        lastColumnRange.Border.BorderAround(ExcelBorderStyle.Thick, Color.Black);
+
+        lastColumnRange.Fill.PatternType = ExcelFillStyle.Solid;
+        lastColumnRange.Fill.BackgroundColor.SetColor(Color.FromArgb(50,67, 255, 100));
+        lastColumnRange.Fill.BackgroundColor.Tint = 0.5;
+
+        toFormatWs.Cells[1, 1, 3, lastColumn].Style.Border.BorderAround(ExcelBorderStyle.Thick, Color.Black);
+        toFormatWs.Cells[1, 1, lastRow, 1].Style.Border.BorderAround(ExcelBorderStyle.Thick, Color.Black);
+
+        for (var row = 1; row <= lastRow; row++)
+        {
+            var cellValue = toFormatWs.Cells[row, 1].Value?.ToString() ?? "";
+            if (!cellValue.Contains("spolu", StringComparison.OrdinalIgnoreCase)) continue;
+
+            toFormatWs.Cells[row, 1, lastRow, lastColumn].Style.Border.BorderAround(ExcelBorderStyle.Thick, Color.Black);
+            toFormatWs.Cells[row, 1, row + 2, lastColumn].Style.Border.BorderAround(ExcelBorderStyle.Thick, Color.Black);
+            break;
+        }
+
+        for (var row = 1; row <= lastRow; row++)
+        {
+            var cellValue = toFormatWs.Cells[row, 1].Value?.ToString() ?? "";
+            if (!cellValue.Contains("ch", StringComparison.OrdinalIgnoreCase) || cellValue.Contains("%")) continue;
+
+            toFormatWs.Cells[row, 1, lastRow, lastColumn].Style.Border.BorderAround(ExcelBorderStyle.Thick, Color.Black);
+            break;
+        }
+
+        int columnsAmount;
+        for (var column = 2; column <= lastColumn; column += columnsAmount)
+        {
+            var mergedRange = toFormatWs.MergedCells[1, column];
+            columnsAmount = new ExcelAddress(mergedRange).Columns;
+
+            toFormatWs.Cells[1, column, lastRow, column + columnsAmount - 1].Style.Border.BorderAround(ExcelBorderStyle.Thick, Color.Black);
+        }
+
+        for (var column = 2; column <= lastColumn; column++)
+        {
+            var cellValue = toFormatWs.Cells[3, column].Value?.ToString() ?? "";
+            if (!cellValue.Contains("peds", StringComparison.OrdinalIgnoreCase)) continue;
+            for (var row = 3; row <= lastRow; row++)
+            {
+                toFormatWs.Cells[row, column].Style.Font.Color.SetColor(Color.Gray);
+            }
+        }
+
         toFormatWs.Cells.Style.VerticalAlignment = ExcelVerticalAlignment.Center;
         toFormatWs.Cells.Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
 
+        toFormatWs.Cells.AutoFitColumns();
     }
 }
