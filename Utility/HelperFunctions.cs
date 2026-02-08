@@ -26,20 +26,54 @@ public static class HelperFunctions
         BorderAround(ws, cellData.Start.Row, cellData.Start.Column);
     }
 
-    public static void BorderAround(ExcelWorksheet ws, int cellRow, int cellColumn)
+    public static void BorderAround(ExcelWorksheet ws, int cellRow, int cellColumn, ExcelBorderStyle style = ExcelBorderStyle.Thin)
     {
         var border = ws.Cells[cellRow, cellColumn].Style.Border;
 
-        border.Bottom.Style = ExcelBorderStyle.Thin;
+        border.Bottom.Style = style;
         border.Bottom.Color.SetColor(Color.Black);
 
-        border.Top.Style = ExcelBorderStyle.Thin;
+        border.Top.Style = style;
         border.Top.Color.SetColor(Color.Black);
 
-        border.Left.Style = ExcelBorderStyle.Thin;
+        border.Left.Style = style;
         border.Left.Color.SetColor(Color.Black);
 
-        border.Right.Style = ExcelBorderStyle.Thin;
+        border.Right.Style = style;
         border.Right.Color.SetColor(Color.Black);
+    }
+
+    public static void BorderAround(ExcelWorksheet ws, int cellRow, int cellColumn, int cellRowEnd, int cellColumnEnd, ExcelBorderStyle style = ExcelBorderStyle.Thin)
+    {
+        ApplyBorderIfEmpty(ws.Cells[cellRow, cellColumn, cellRow, cellColumnEnd].Style.Border.Top, style);
+
+        ApplyBorderIfEmpty(ws.Cells[cellRowEnd, cellColumn, cellRowEnd, cellColumnEnd].Style.Border.Bottom, style);
+
+        ApplyBorderIfEmpty(ws.Cells[cellRow, cellColumn, cellRowEnd, cellColumn].Style.Border.Left, style);
+
+        ApplyBorderIfEmpty(ws.Cells[cellRow, cellColumnEnd, cellRowEnd, cellColumnEnd].Style.Border.Right, style);
+    }
+
+    private static void ApplyBorderIfEmpty(ExcelBorderItem border, ExcelBorderStyle style)
+    {
+        if (border.Style != ExcelBorderStyle.None) return;
+        border.Style = style;
+        border.Color.SetColor(Color.Black);
+    }
+
+    public static async Task StartSpinner(CancellationToken token)
+    {
+        char[] spinChars = { '|', '/', '-', '\\' };
+        var i = 0;
+
+        while (!token.IsCancellationRequested)
+        {
+            Console.Write($"\rProcessing Excel Data ... {spinChars[i % 4]} ");
+            i++;
+
+            await Task.Delay(100);
+        }
+
+        Console.Write("\rDone!                                      \n");
     }
 }
