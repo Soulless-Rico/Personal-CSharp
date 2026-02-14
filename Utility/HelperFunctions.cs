@@ -54,6 +54,23 @@ public static class HelperFunctions
         ApplyBorderIfEmpty(ws.Cells[cellRow, cellColumnEnd, cellRowEnd, cellColumnEnd].Style.Border.Right, style);
     }
 
+    public static void BorderEverythingInRange(ExcelWorksheet ws, int rowStart, int columnStart, int rowEnd, int columnEnd, ExcelBorderStyle style = ExcelBorderStyle.Thin)
+    {
+        var border = ws.Cells[rowStart, columnStart, rowEnd, columnEnd].Style.Border;
+
+        border.Bottom.Style = style;
+        border.Bottom.Color.SetColor(Color.Black);
+
+        border.Top.Style = style;
+        border.Top.Color.SetColor(Color.Black);
+
+        border.Left.Style = style;
+        border.Left.Color.SetColor(Color.Black);
+
+        border.Right.Style = style;
+        border.Right.Color.SetColor(Color.Black);
+    }
+
     private static void ApplyBorderIfEmpty(ExcelBorderItem border, ExcelBorderStyle style)
     {
         if (border.Style != ExcelBorderStyle.None) return;
