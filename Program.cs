@@ -8,10 +8,12 @@ public static class Formatter
 {
     public static void Main()
     {
-        // Preparation
         Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] ----- Program Started -----");
 
-        var (toFormatExcelFilePath, generatedExcelFilePath) = ExcelFileEntry.LoadSelectedFiles();
+
+        var (toFormatExcelFilePath, generatedExcelFilePath, fileName) = ExcelFileEntry.LoadSelectedFiles();
+        HelperFunctions.CreateIfNotFoundLogFolder(fileName);
+
         using var genPackage = new ExcelPackage(new FileInfo(generatedExcelFilePath));
         using var toFormatPackage = new ExcelPackage(new FileInfo(toFormatExcelFilePath));
 
