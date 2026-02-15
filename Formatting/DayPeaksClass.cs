@@ -1,6 +1,4 @@
 using System.Drawing;
-using System.Globalization;
-using DocumentFormat.OpenXml.Drawing;
 using ExcelFormatterConsole.Utility;
 using OfficeOpenXml;
 using OfficeOpenXml.Style;
