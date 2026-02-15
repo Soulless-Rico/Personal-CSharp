@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using OfficeOpenXml;
 
 namespace ExcelFormatterConsole.Utility;
@@ -18,7 +18,7 @@ public static class ExcelFileEntry
         Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] <<-->> {message} <<-->> ");
     }
 
-    public static (string toFormatExcelFilePath, string generatedExcelFilePath) LoadSelectedFiles()
+    public static (string toFormatExcelFilePath, string generatedExcelFilePath, string fileName) LoadSelectedFiles()
     {
         Stopwatch stopwatch = Stopwatch.StartNew();
 
@@ -55,7 +55,7 @@ public static class ExcelFileEntry
         {
             package.Workbook.Worksheets.Add("1");
 
-            string allowedCharacters = "qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM0123456789-_.";
+            string allowedCharacters = "qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM0123456789-_";
             do
             {
                 int flaggedChars = 0;
@@ -128,6 +128,7 @@ public static class ExcelFileEntry
         } while (!File.Exists(unformattedExcelFilePath) || new FileInfo(unformattedExcelFilePath).Extension.ToLower() != ".xlsx");
 
         TimedLog("Verified unformatted excel file");
-        return (newExcelFilePath, unformattedExcelFilePath);
+        var fileNameWithoutExtension = fileName.Split(".")[0].Trim();
+        return (newExcelFilePath, unformattedExcelFilePath, fileNameWithoutExtension);
     }
 }
