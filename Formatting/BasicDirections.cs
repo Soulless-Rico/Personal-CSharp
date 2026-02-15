@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
 using OfficeOpenXml;
@@ -40,7 +39,7 @@ public static class BasicDirectionsClass
 
     private static readonly Dictionary<string, string> DirectionTranslations = new (StringComparer.OrdinalIgnoreCase)
     {
-        { "right", "smer doprava" },
+        { "right", "doprava" },
         { "left", "dolava" },
         { "thru", "priamo" },
         { "u-turn", "otočenie" },
@@ -86,27 +85,16 @@ public static class BasicDirectionsClass
         "north-northwest"
     ];
 
-    private static readonly Stopwatch Stopwatch = Stopwatch.StartNew();
-
-    public static void TimedLog(string logMessage)
-    {
-        Stopwatch.Stop();
-        Console.WriteLine($"[{Stopwatch.Elapsed.TotalMilliseconds} ms] ----- {logMessage} -----");
-        Stopwatch.Restart();
-    }
-
     private static (List<string>, int) DetermineVehicleCategories(ExcelWorksheet worksheetObject)
     {
         var lastVehicleCategory = -1;
 
-        // getting vehicle categories
         List<string> vehicleCategories = [];
         for (var letterIndex = 2;; letterIndex++)
         {
             var currentCellValue = worksheetObject.Cells[3, letterIndex].Value?.ToString() ?? string.Empty;
             if (vehicleCategories.Contains(currentCellValue))
             {
-                // check so no duplicates get added + added additional category
                 vehicleCategories.Add("Spolu");
                 lastVehicleCategory++;
                 break;
@@ -116,9 +104,6 @@ public static class BasicDirectionsClass
             vehicleCategories.Add(currentCellValue);
         }
 
-        TimedLog($"{worksheetObject.Name} | Getting vehicle categories 50%");
-
-        // applying shortcuts
         List<string> categoryShortcuts = [];
         foreach (var category in vehicleCategories)
         {
@@ -133,7 +118,6 @@ public static class BasicDirectionsClass
             }
         }
 
-        TimedLog($"{worksheetObject.Name} | Applied vehicle categories 100%");
         return (categoryShortcuts, lastVehicleCategory);
     }
 
@@ -157,8 +141,6 @@ public static class BasicDirectionsClass
             }
         }
 
-        TimedLog($"{toFormatWs.Name} | Cell mapping 25%");
-
         try
         {
             var dt1 = DateTime.FromOADate(Convert.ToDouble(genWs.Cells["B7"].Value));
@@ -175,12 +157,8 @@ public static class BasicDirectionsClass
             throw;
         }
 
-        TimedLog($"{toFormatWs.Name} | Date formatting 50%");
-
         toFormatWs.Cells[toFormatWs.Dimension.Address].AutoFitColumns();
         toFormatWs.Cells["B7:B8"].Style.HorizontalAlignment = ExcelHorizontalAlignment.Right;
-
-        TimedLog($"{toFormatWs.Name} | Styling worksheet 100%");
     }
 
     public static int FindAllDirections(ExcelPackage genPackage)
@@ -197,14 +175,10 @@ public static class BasicDirectionsClass
             return AllKnownDirections.Contains(cleanedName);
         }).ToList();
 
-        TimedLog($"{genPackage.File.Name} | Finding all directions 50%");
-
         _directions = directionSheets.Count;
 
-        // loop through all found directions
         for (var cycle = 1; cycle <= _directions; cycle++)
         {
-            // read worksheet data to determine correct direction
 
             var selectedWorksheet = genPackage.Workbook.Worksheets[cycle];
             var cellValue = selectedWorksheet.Cells["B1"].Value?.ToString() ?? string.Empty.Trim();
@@ -222,53 +196,34 @@ public static class BasicDirectionsClass
             }
         }
 
-        TimedLog($"{genPackage.File.Name} | Assigning direction values 100%");
         return _directions;
     }
 
     public static void BasicDirections(int directionNumber, ExcelPackage genPackage, ExcelPackage toFormatPackage)
     {
-        var newWorksheet = toFormatPackage.Workbook.Worksheets.Add(directionNumber.ToString());
-        ExcelWorksheet? generatedWorksheet = null;
+        var toFormatWs = toFormatPackage.Workbook.Worksheets.Add(directionNumber.ToString());
+        var genWs = (from direction in AllDirections
+            where direction.Contains(directionNumber + ":")
+            select genPackage.Workbook.Worksheets[Convert.ToInt16(direction.Trim().Remove(0, 2))]).FirstOrDefault(ws => ws != null);
 
-        // find correct worksheet -------------------------------------------------------------------------------------------------------------------------------------------------
-
-        foreach (var direction in AllDirections)
-        {
-            // check for correct direction
-            if (direction.Contains(directionNumber + ":"))
-            {
-                var sheet = genPackage.Workbook.Worksheets[Convert.ToInt16(direction.Trim().Remove(0, 2))];
-                if (sheet != null)
-                {
-                    generatedWorksheet = sheet;
-                    break;
-                }
-            }
-        }
-
-        if (generatedWorksheet == null)
+        if (genWs == null)
         {
             HelperFunctions.ErrorLog($"Couldn't find correct worksheet for direction: {directionNumber}");
             return;
         }
 
-        newWorksheet.Cells["B1"].Value = generatedWorksheet.Cells["B1"].Value;
-        newWorksheet.Name = generatedWorksheet.Cells["B1"].Value.ToString();
-        newWorksheet.Cells["A1"].Value = "Čas";
+        toFormatWs.Cells["B1"].Value = genWs.Cells["B1"].Value;
+        toFormatWs.Name = genWs.Cells["B1"].Value.ToString();
+        toFormatWs.Cells["A1"].Value = "Čas";
 
-        TimedLog($"{newWorksheet.Name} | Finding correct worksheet 20%");
-
-        // time formatting -------------------------------------------------------------------------------------------------------------------------------------------------
-
-        var lastRow = generatedWorksheet.Dimension.End.Row;
+        var lastRow = genWs.Dimension.End.Row;
         var inputRow = 4;
         while (true)
         {
             if (inputRow == lastRow)
             {
                 inputRow--;
-                var lastCellTimeValue = newWorksheet.Cells["A" + inputRow].Value?.ToString() ?? "00:00-00:00";
+                var lastCellTimeValue = toFormatWs.Cells["A" + inputRow].Value?.ToString() ?? "00:00-00:00";
                 var lastCellTime = lastCellTimeValue.Split("-");
 
                 if (lastCellTime.Length < 2)
@@ -287,63 +242,52 @@ public static class BasicDirectionsClass
                                  DateTime.Parse(lastCellTime[0].Trim());
 
                 inputRow++;
-                newWorksheet.Cells["A" + inputRow].Value =
+                toFormatWs.Cells["A" + inputRow].Value =
                     $"{lastCellTime[1].Trim()} - {t2.AddMinutes(difference.TotalMinutes):HH:mm}";
 
-                //Console.WriteLine($"Loop broken on last row: {inputRow}");
                 break;
             }
 
-            var currentCell = generatedWorksheet.Cells["A" + inputRow].Value;
-            var nextCell = generatedWorksheet.Cells["A" + (inputRow + 1)].Value;
+            var currentCell = genWs.Cells["A" + inputRow].Value;
+            var nextCell = genWs.Cells["A" + (inputRow + 1)].Value;
 
             if (currentCell == null || nextCell == null)
             {
-                //Console.WriteLine($"Loop broken on row: {inputRow}");
                 break;
             }
 
             var dt1 = DateTime.FromOADate(Convert.ToDouble(currentCell));
             var dt2 = DateTime.FromOADate(Convert.ToDouble(nextCell));
 
-            newWorksheet.Cells["A" + inputRow].Value =
+            toFormatWs.Cells["A" + inputRow].Value =
                 $"{dt1.ToString("HH:mm", CultureInfo.InvariantCulture)} - {dt2.ToString("HH:mm", CultureInfo.InvariantCulture)}";
 
             inputRow++;
         }
 
-        var lastRowBeforeExpandingNewWorksheet = newWorksheet.Dimension.End.Row;
+        var lastRowBeforeExpandingNewWorksheet = toFormatWs.Dimension.End.Row;
 
-        TimedLog($"{newWorksheet.Name} | Formatted special cells 40%");
-
-        // primary data part 1 -------------------------------------------------------------------------------------------------------------------------------------------------
-
-        // reading primary data
         List<string> primaryData = [];
-        for (var letterIndex = 2; letterIndex <= generatedWorksheet.Dimension.End.Column; letterIndex++)
+        for (var letterIndex = 2; letterIndex <= genWs.Dimension.End.Column; letterIndex++)
         {
-            for (var rowIndex = 4; rowIndex <= generatedWorksheet.Dimension.End.Row; rowIndex++)
+            for (var rowIndex = 4; rowIndex <= genWs.Dimension.End.Row; rowIndex++)
             {
-                primaryData.Add(generatedWorksheet.Cells[rowIndex, letterIndex].Value.ToString() ?? string.Empty);
+                primaryData.Add(genWs.Cells[rowIndex, letterIndex].Value.ToString() ?? string.Empty);
 
-                if (generatedWorksheet.Cells[rowIndex, letterIndex].Value.ToString() == string.Empty)
+                if (genWs.Cells[rowIndex, letterIndex].Value.ToString() == string.Empty)
                 {
                     HelperFunctions.ErrorLog($"Null Value Detected: Primary data writing detected an empty value| row:{rowIndex} column:{letterIndex} |");
                 }
             }
         }
 
-        // Other
-        var (categoryShortcuts, lastVehicleCategory) = DetermineVehicleCategories(generatedWorksheet);
+        var (categoryShortcuts, lastVehicleCategory) = DetermineVehicleCategories(genWs);
         var totalCategories = lastVehicleCategory + 1;
 
-        // primary data part 2 ------------------------------------------------------------------------------------------------------------------------------------
-
-        // writing primary data
         var listIndex = 0;
         var leftOutColumns = 1;
         for (var letterIndex = 2;
-             letterIndex < generatedWorksheet.Dimension.End.Column + leftOutColumns;
+             letterIndex < genWs.Dimension.End.Column + leftOutColumns;
              letterIndex++)
         {
             if ((letterIndex - 1) % totalCategories == 0)
@@ -352,23 +296,20 @@ public static class BasicDirectionsClass
                 continue;
             }
 
-            for (var rowIndex = 4; rowIndex <= generatedWorksheet.Dimension.End.Row; rowIndex++)
+            for (var rowIndex = 4; rowIndex <= genWs.Dimension.End.Row; rowIndex++)
             {
-                newWorksheet.Cells[rowIndex, letterIndex].Value = primaryData[listIndex];
+                toFormatWs.Cells[rowIndex, letterIndex].Value = primaryData[listIndex];
                 listIndex++;
             }
         }
 
-        TimedLog($"{newWorksheet.Name} | Read and wrote all primary data 60%");
-
-        // writing vehicle categories in correct spots
         listIndex = 0;
-        var lastCategoryCell = newWorksheet.Dimension.End.Column + 1;
+        var lastCategoryCell = toFormatWs.Dimension.End.Column + 1;
         for (var letterIndex = 2; letterIndex <= lastCategoryCell; letterIndex++)
         {
             if (listIndex <= lastVehicleCategory)
             {
-                newWorksheet.Cells[3, letterIndex].Value = categoryShortcuts[listIndex];
+                toFormatWs.Cells[3, letterIndex].Value = categoryShortcuts[listIndex];
                 listIndex++;
             }
             else
@@ -378,21 +319,20 @@ public static class BasicDirectionsClass
             }
         }
 
-        // added up primary data
         for (var rowIndex = 4; rowIndex <= lastRowBeforeExpandingNewWorksheet; rowIndex++)
         {
             var addedTogether = 0;
-            for (var letterIndex = 2; letterIndex <= newWorksheet.Dimension.End.Column; letterIndex++)
+            for (var letterIndex = 2; letterIndex <= toFormatWs.Dimension.End.Column; letterIndex++)
             {
                 if ((letterIndex - 1) % totalCategories == 0)
                 {
-                    newWorksheet.Cells[rowIndex, letterIndex].Value = addedTogether;
+                    toFormatWs.Cells[rowIndex, letterIndex].Value = addedTogether;
 
                     addedTogether = 0;
                     continue;
                 }
 
-                var cellValue = newWorksheet.Cells[rowIndex, letterIndex].Value?.ToString() ?? "0".Trim('`').Trim();
+                var cellValue = toFormatWs.Cells[rowIndex, letterIndex].Value?.ToString() ?? "0".Trim('`').Trim();
                 if (int.TryParse(cellValue, out var number))
                 {
                     addedTogether += number;
@@ -404,82 +344,75 @@ public static class BasicDirectionsClass
             }
         }
 
-        // 2nd row part -------------------------------------------------------------------------------------------------------------------------------------------------
-
         var gapBetweenWorksheets = 0;
-        for (var columnIndex = 2; columnIndex <= newWorksheet.Dimension.End.Column; columnIndex++)
+        for (var columnIndex = 2; columnIndex <= toFormatWs.Dimension.End.Column; columnIndex++)
         {
             if ((columnIndex - 1) % totalCategories == 0)
             {
-                newWorksheet.Cells[2, columnIndex - lastVehicleCategory, 2, columnIndex].Merge = true;
+                toFormatWs.Cells[2, columnIndex - lastVehicleCategory, 2, columnIndex].Merge = true;
             }
             else if (columnIndex == 2)
             {
-                newWorksheet.Cells[2, 2, 2, totalCategories + 1].Merge = true;
+                toFormatWs.Cells[2, 2, 2, totalCategories + 1].Merge = true;
 
-                if (string.IsNullOrWhiteSpace(generatedWorksheet.Cells[2, columnIndex - gapBetweenWorksheets].Value.ToString()))
+                if (string.IsNullOrWhiteSpace(genWs.Cells[2, columnIndex - gapBetweenWorksheets].Value.ToString()))
                 {
                     HelperFunctions.ErrorLog("direction is null, skipping formatting");
                     continue;
                 }
 
-                var key = generatedWorksheet.Cells[2, columnIndex - gapBetweenWorksheets].Value?.ToString() ?? "0 - 0 error".ToLower();
-                newWorksheet.Cells[2, columnIndex].Value = DirectionTranslations.TryGetValue(key, out var translation) ?
-                    $"{directionNumber} - {gapBetweenWorksheets + 1} {translation}" : generatedWorksheet.Cells[2, columnIndex - gapBetweenWorksheets].Value;
+                var key = genWs.Cells[2, columnIndex - gapBetweenWorksheets].Value?.ToString() ?? "0 - 0 error".ToLower();
+                toFormatWs.Cells[2, columnIndex].Value = DirectionTranslations.TryGetValue(key, out var translation) ?
+                    translation : genWs.Cells[2, columnIndex - gapBetweenWorksheets].Value;
 
                 if (key == "u-turn")
                 {
-                    newWorksheet.Cells[2, columnIndex].Value = $"{directionNumber} - {directionNumber} {translation}";
+                    toFormatWs.Cells[2, columnIndex].Value = translation;
                 }
 
                 gapBetweenWorksheets++;
             }
 
-            if ((columnIndex - 2) % totalCategories == 0 && columnIndex != 2)
+            if ((columnIndex - 2) % totalCategories != 0 || columnIndex == 2) continue;
             {
-                if (string.IsNullOrWhiteSpace(generatedWorksheet.Cells[2, columnIndex - gapBetweenWorksheets].Value.ToString()))
+                if (string.IsNullOrWhiteSpace(genWs.Cells[2, columnIndex - gapBetweenWorksheets].Value.ToString()))
                 {
                     HelperFunctions.ErrorLog("direction is null, skipping formatting");
                     continue;
                 }
 
-                var key = generatedWorksheet.Cells[2, columnIndex - gapBetweenWorksheets].Value?.ToString() ?? "0 - 0 error".ToLower();
-                newWorksheet.Cells[2, columnIndex].Value = DirectionTranslations.TryGetValue(key, out var translation) ?
-                    $"{directionNumber} - {gapBetweenWorksheets + 1} {translation}" : generatedWorksheet.Cells[2, columnIndex - gapBetweenWorksheets].Value;
+                var key = genWs.Cells[2, columnIndex - gapBetweenWorksheets].Value?.ToString() ?? "0 - 0 error".ToLower();
+                toFormatWs.Cells[2, columnIndex].Value = DirectionTranslations.TryGetValue(key, out var translation) ?
+                    translation : genWs.Cells[2, columnIndex - gapBetweenWorksheets].Value;
 
                 if (key == "u-turn")
                 {
-                    newWorksheet.Cells[2, columnIndex].Value = $"{directionNumber} - {directionNumber} {translation}";
+                    toFormatWs.Cells[2, columnIndex].Value = translation;
                 }
 
-                //newWorksheet.Cells[2, columnIndex].Value = generatedWorksheet.Cells[2, columnIndex - gapBetweenWorksheets].Value;
                 gapBetweenWorksheets++;
             }
         }
 
-        // added up column data
-        for (var letterIndex = 2; letterIndex <= newWorksheet.Dimension.End.Column; letterIndex++)
+        for (var letterIndex = 2; letterIndex <= toFormatWs.Dimension.End.Column; letterIndex++)
         {
-            if ((letterIndex - 1) % totalCategories == 0)
+            if ((letterIndex - 1) % totalCategories != 0) continue;
+            var addedTogether = 0;
+            for (var rowIndex = 4; rowIndex <= lastRowBeforeExpandingNewWorksheet + 1; rowIndex++)
             {
-                var addedTogether = 0;
-                for (var rowIndex = 4; rowIndex <= lastRowBeforeExpandingNewWorksheet + 1; rowIndex++)
+                if (rowIndex == lastRowBeforeExpandingNewWorksheet + 1)
                 {
-                    if (rowIndex == lastRowBeforeExpandingNewWorksheet + 1)
-                    {
-                        newWorksheet.Cells[rowIndex + 1, letterIndex].Value = addedTogether;
-                        break;
-                    }
-
-                    addedTogether += Convert.ToInt32(newWorksheet.Cells[rowIndex, letterIndex].Value.ToString() ?? "0".Trim('`').Trim());
+                    toFormatWs.Cells[rowIndex + 1, letterIndex].Value = addedTogether;
+                    break;
                 }
+
+                addedTogether += Convert.ToInt32(toFormatWs.Cells[rowIndex, letterIndex].Value.ToString() ?? "0".Trim('`').Trim());
             }
         }
 
-        // everything added up data
-        var lastColumn = newWorksheet.Dimension.End.Column + 1;
-        newWorksheet.Cells[1, lastColumn, 3, lastColumn].Merge = true;
-        newWorksheet.Cells[1, lastColumn, 3, lastColumn].Value = "Suma";
+        var lastColumn = toFormatWs.Dimension.End.Column + 1;
+        toFormatWs.Cells[1, lastColumn, 3, lastColumn].Merge = true;
+        toFormatWs.Cells[1, lastColumn, 3, lastColumn].Value = "Suma";
 
         var onlySelectedColumns = false;
         for (var rowIndex = 4; rowIndex <= lastRowBeforeExpandingNewWorksheet + 2; rowIndex++)
@@ -499,120 +432,97 @@ public static class BasicDirectionsClass
             {
                 if (letterIndex == lastColumn)
                 {
-                    newWorksheet.Cells[rowIndex, letterIndex].Value = addedTogether;
-                    //Console.WriteLine($"Assigned value '{addedTogether}' to row {rowIndex} and column {letterIndex}");
+                    toFormatWs.Cells[rowIndex, letterIndex].Value = addedTogether;
                     break;
                 }
 
-                if ((letterIndex - 1) % totalCategories != 0 && !onlySelectedColumns)
+                if ((letterIndex - 1) % totalCategories != 0 && !onlySelectedColumns || (letterIndex - 1) % totalCategories == 0 && onlySelectedColumns)
                 {
-                    addedTogether += Convert.ToInt32(newWorksheet.Cells[rowIndex, letterIndex].Value.ToString() ?? "0".Trim('`').Trim());
-                }
-                else if ((letterIndex - 1) % totalCategories == 0 && onlySelectedColumns)
-                {
-                    addedTogether += Convert.ToInt32(newWorksheet.Cells[rowIndex, letterIndex].Value.ToString() ?? "0".Trim('`').Trim());
+                    addedTogether += Convert.ToInt32(toFormatWs.Cells[rowIndex, letterIndex].Value.ToString() ?? "0".Trim('`').Trim());
                 }
             }
         }
 
-        TimedLog($"{newWorksheet.Name} | Added additional calculations 80%");
-
-        // styling -------------------------------------------------------------------------------------------------------------------------------------------------
-
-        // 1st to 3rd rows
-        newWorksheet.Cells[1, 1, 3, newWorksheet.Dimension.End.Column].Style.Font.Bold = true;
-        newWorksheet.Cells[1, 1, 3, newWorksheet.Dimension.End.Column].Style.HorizontalAlignment =
+        toFormatWs.Cells[1, 1, 3, toFormatWs.Dimension.End.Column].Style.Font.Bold = true;
+        toFormatWs.Cells[1, 1, 3, toFormatWs.Dimension.End.Column].Style.HorizontalAlignment =
             ExcelHorizontalAlignment.Center;
 
-        newWorksheet.Cells[1, 2, 1, newWorksheet.Dimension.End.Column - 1].Merge = true;
+        toFormatWs.Cells[1, 2, 1, toFormatWs.Dimension.End.Column - 1].Merge = true;
 
-        newWorksheet.Cells["A1:A3"].Merge = true;
-        newWorksheet.Cells["A1:A3"].Style.Border.BorderAround(ExcelBorderStyle.Thick, Color.Black);
-        newWorksheet.Cells["A1"].Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
-        newWorksheet.Cells["A1"].Style.VerticalAlignment = ExcelVerticalAlignment.Center;
+        toFormatWs.Cells["A1:A3"].Merge = true;
+        toFormatWs.Cells["A1:A3"].Style.Border.BorderAround(ExcelBorderStyle.Thick, Color.Black);
+        toFormatWs.Cells["A1"].Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
+        toFormatWs.Cells["A1"].Style.VerticalAlignment = ExcelVerticalAlignment.Center;
 
 
-        for (var columnIndex = 2; columnIndex <= newWorksheet.Dimension.End.Column; columnIndex++)
+        for (var columnIndex = 2; columnIndex <= toFormatWs.Dimension.End.Column; columnIndex++)
         {
-            if ((columnIndex - 1) % totalCategories == 0)
-            {
-                newWorksheet.Cells[2, columnIndex - lastVehicleCategory, 2, columnIndex].Style.Border
-                    .BorderAround(ExcelBorderStyle.Thick, Color.Black);
+            if ((columnIndex - 1) % totalCategories != 0) continue;
+            toFormatWs.Cells[2, columnIndex - lastVehicleCategory, 2, columnIndex].Style.Border
+                .BorderAround(ExcelBorderStyle.Thick, Color.Black);
 
-                newWorksheet.Cells[3, columnIndex - lastVehicleCategory, 3, columnIndex].Style.Border
-                    .BorderAround(ExcelBorderStyle.Thick, Color.Black);
-            }
+            toFormatWs.Cells[3, columnIndex - lastVehicleCategory, 3, columnIndex].Style.Border
+                .BorderAround(ExcelBorderStyle.Thick, Color.Black);
         }
 
-        newWorksheet.Cells[1, newWorksheet.Dimension.End.Column, 3, newWorksheet.Dimension.End.Column].Style.Border
+        toFormatWs.Cells[1, toFormatWs.Dimension.End.Column, 3, toFormatWs.Dimension.End.Column].Style.Border
             .BorderAround(ExcelBorderStyle.Thick);
 
-        // time
-        newWorksheet.Cells["A1:A" + lastRowBeforeExpandingNewWorksheet].Style.Border
+        toFormatWs.Cells["A1:A" + lastRowBeforeExpandingNewWorksheet].Style.Border
             .BorderAround(ExcelBorderStyle.Thick);
 
         for (var row = 4; row < lastRowBeforeExpandingNewWorksheet; row++)
         {
-            var cellValue = newWorksheet.Cells["A" + row].Value?.ToString() ?? "00:00-00:00";
+            var cellValue = toFormatWs.Cells["A" + row].Value?.ToString() ?? "00:00-00:00";
             var cellValueSplit = cellValue.Split("-");
 
             var dt = DateTime.Parse(cellValueSplit[1]);
             if (dt.ToString("mm") == "00")
             {
-                newWorksheet.Cells[row, 1, row, newWorksheet.Dimension.End.Column - 1].Style.Border.Bottom.Style =
+                toFormatWs.Cells[row, 1, row, toFormatWs.Dimension.End.Column - 1].Style.Border.Bottom.Style =
                     ExcelBorderStyle.Thick;
             }
         }
 
-        // added together column bordering
-        newWorksheet.Cells[1, 1, lastRowBeforeExpandingNewWorksheet, newWorksheet.Dimension.End.Column - 1].Style
+        toFormatWs.Cells[1, 1, lastRowBeforeExpandingNewWorksheet, toFormatWs.Dimension.End.Column - 1].Style
             .Border.BorderAround(ExcelBorderStyle.Thick);
 
-        for (var columnIndex = 2; columnIndex <= newWorksheet.Dimension.End.Column; columnIndex++)
+        for (var columnIndex = 2; columnIndex <= toFormatWs.Dimension.End.Column; columnIndex++)
         {
             if ((columnIndex - 1) % totalCategories == 0)
             {
-                newWorksheet.Cells[3, columnIndex, lastRowBeforeExpandingNewWorksheet, columnIndex].Style.Border
+                toFormatWs.Cells[3, columnIndex, lastRowBeforeExpandingNewWorksheet, columnIndex].Style.Border
                     .BorderAround(ExcelBorderStyle.Thick, Color.Black);
             }
         }
 
-        // gray background
         var greyColorRows = lastRowBeforeExpandingNewWorksheet + 2;
-        for (var columnIndex = 2; columnIndex <= newWorksheet.Dimension.End.Column; columnIndex++)
+        for (var columnIndex = 2; columnIndex <= toFormatWs.Dimension.End.Column; columnIndex++)
         {
-            if ((columnIndex - 1) % totalCategories == 0)
-            {
-                newWorksheet.Cells[3, columnIndex, greyColorRows, columnIndex].Style.Fill.PatternType =
-                    ExcelFillStyle.Solid;
-                newWorksheet.Cells[3, columnIndex, greyColorRows, columnIndex].Style.Fill.BackgroundColor
-                    .SetColor(Color.LightGray);
-            }
+            if ((columnIndex - 1) % totalCategories != 0) continue;
+            toFormatWs.Cells[3, columnIndex, greyColorRows, columnIndex].Style.Fill.PatternType =
+                ExcelFillStyle.Solid;
+            toFormatWs.Cells[3, columnIndex, greyColorRows, columnIndex].Style.Fill.BackgroundColor
+                .SetColor(Color.LightGray);
         }
 
-        // green background
-        var greenColorColumns = newWorksheet.Dimension.End.Column - 1;
-        for (var rowIndex = 1; rowIndex <= newWorksheet.Dimension.End.Row; rowIndex++)
+        var greenColorColumns = toFormatWs.Dimension.End.Column - 1;
+        for (var rowIndex = 1; rowIndex <= toFormatWs.Dimension.End.Row; rowIndex++)
         {
-            newWorksheet.Cells[rowIndex, greenColorColumns].Style.Fill.PatternType = ExcelFillStyle.Solid;
-            newWorksheet.Cells[rowIndex, greenColorColumns].Style.Fill.BackgroundColor.SetColor(Color.LightGreen);
+            toFormatWs.Cells[rowIndex, greenColorColumns].Style.Fill.PatternType = ExcelFillStyle.Solid;
+            toFormatWs.Cells[rowIndex, greenColorColumns].Style.Fill.BackgroundColor.SetColor(Color.FromArgb(50,67, 255, 100));
+            toFormatWs.Cells[rowIndex, greenColorColumns].Style.Fill.BackgroundColor.Tint = 0.5;
         }
 
-        // specific column universal settings
-        newWorksheet.Cells["A:A"].Style.Font.Bold = true;
+        toFormatWs.Cells["A:A"].Style.Font.Bold = true;
 
-        // specific row universal settings
-        newWorksheet.Cells["1:3"].Style.Font.Bold = true;
+        toFormatWs.Cells["1:3"].Style.Font.Bold = true;
 
-        // universal settings
-        newWorksheet.Cells["A1:" + newWorksheet.Dimension.End.Address].Style.Numberformat.Format = "General";
-        newWorksheet.Cells["A1:" + newWorksheet.Dimension.End.Address].AutoFitColumns();
-        newWorksheet.Cells["A1:" + newWorksheet.Dimension.End.Address].Style.HorizontalAlignment =
+        toFormatWs.Cells["A1:" + toFormatWs.Dimension.End.Address].Style.Numberformat.Format = "General";
+        toFormatWs.Cells["A1:" + toFormatWs.Dimension.End.Address].AutoFitColumns();
+        toFormatWs.Cells["A1:" + toFormatWs.Dimension.End.Address].Style.HorizontalAlignment =
             ExcelHorizontalAlignment.Center;
-        newWorksheet.Cells["A1:" + newWorksheet.Dimension.End.Address].Style.VerticalAlignment =
+        toFormatWs.Cells["A1:" + toFormatWs.Dimension.End.Address].Style.VerticalAlignment =
             ExcelVerticalAlignment.Center;
-
-        toFormatPackage.Save();
-        TimedLog($"{newWorksheet.Name} | Styled and saved worksheet 100%");
     }
 }
