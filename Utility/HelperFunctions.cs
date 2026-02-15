@@ -80,7 +80,7 @@ public static class HelperFunctions
 
     public static async Task StartSpinner(CancellationToken token)
     {
-        char[] spinChars = { '|', '/', '-', '\\' };
+        char[] spinChars = ['|', '/', '-', '\\'];
         var i = 0;
 
         while (!token.IsCancellationRequested)
@@ -92,5 +92,40 @@ public static class HelperFunctions
         }
 
         Console.Write("\rDone!                                      \n");
+    }
+
+    private static string _logFile = "";
+
+    public static void CreateIfNotFoundLogFolder(string formatName)
+    {
+        var logDirectory = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "ExcelFormatterLogs"
+        );
+
+        Directory.CreateDirectory(logDirectory);
+
+        var logFileTemp = Path.Combine(logDirectory, formatName + ".log");
+        File.AppendAllText(logFileTemp, "Log created");
+
+        _logFile = logFileTemp;
+    }
+
+    public static void LogToFile(string logMessage)
+    {
+        if (string.IsNullOrWhiteSpace(_logFile))
+        {
+            Console.WriteLine("Can't log bacause log file has not been assigned");
+            return;
+        }
+
+        try
+        {
+            File.AppendAllText(_logFile, $"[{DateTime.Now:HH:mm:ss}] |: {logMessage} {Environment.NewLine}");
+        }
+        catch
+        {
+            Console.WriteLine("Something went wrong when trying to log a process.");
+        }
     }
 }
