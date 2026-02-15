@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Drawing;
 using ExcelFormatterConsole.Utility;
 using OfficeOpenXml;
@@ -10,8 +9,6 @@ public static class TirClass
 // Total Intensity Rundown
 {
     private const string ToFormatWorksheetName = "Celkový priebeh intenzít";
-
-    private static readonly Stopwatch Stopwatch = Stopwatch.StartNew();
 
     private static readonly Dictionary<string, string> ViableVehicleCategoryTranslations = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -57,7 +54,6 @@ public static class TirClass
         "north-northwest"
     };
 
-
     private static readonly Dictionary<string, string> VehicleCategoryTranslations = new(StringComparer.OrdinalIgnoreCase)
     {
         {"motorcycles", "M"},
@@ -70,13 +66,6 @@ public static class TirClass
         {"pedestrians", "CH"},
     };
 
-    private static void TimedLog(string logMessage)
-    {
-        Stopwatch.Stop();
-        Console.WriteLine($"[{Stopwatch.Elapsed.TotalMilliseconds} ms] ----- {logMessage} -----");
-        Stopwatch.Restart();
-    }
-
     public static ExcelWorksheet FindCorrectWorksheet(ExcelPackage genPackage)
     {
         var eppWorksheet = genPackage.Workbook.Worksheets.FirstOrDefault(worksheet => worksheet.Index > 3 && worksheet.Name.Equals("total volume class breakdown", StringComparison.OrdinalIgnoreCase));
@@ -86,7 +75,6 @@ public static class TirClass
     public static ExcelWorksheet Prepare(ExcelPackage toFormatPackage)
     {
         var toFormatWs = toFormatPackage.Workbook.Worksheets.Add(ToFormatWorksheetName);
-        TimedLog($" {toFormatWs.Name} | Created worksheet.");
 
         toFormatWs.Cells["A1:A3"].Merge = true;
         toFormatWs.Cells["A1"].Value = "Čas";
@@ -135,8 +123,6 @@ public static class TirClass
             var correctCellRow = row - 1;
             toFormatWs.Cells["A" + correctCellRow].Value = $"{dtCellValue:HH:mm} - {dtNextCellValue:HH:mm}";
         }
-
-        TimedLog($"{toFormatWs.Name} | Applied date formatting.");
     }
 
 
@@ -165,7 +151,6 @@ public static class TirClass
             toFormatWs.Cells[1, column, 3, column].Merge = true;
         }
 
-        TimedLog($"{toFormatWs.Name} | Applied vehicle category formatting.");
         return vehicleCategoryTranslations.Count;
     }
 
@@ -244,7 +229,6 @@ public static class TirClass
             }
         }
 
-        TimedLog($"{genPackage.File.Name} | Read primary data from all directions.");
         return primaryDataMapping;
     }
 
@@ -276,8 +260,6 @@ public static class TirClass
                 toFormatWs.Cells[row, column].Value = primaryDataMapping[date][category];
             }
         }
-
-        TimedLog($"{toFormatWs.Name} | Wrote all primary data.");
     }
 
     public static double CalculateAddedUpRowData(ExcelWorksheet toFormatWs)
@@ -326,7 +308,6 @@ public static class TirClass
             everythingAddedUp += addedUpPrimaryData;
         }
 
-        TimedLog($"{toFormatWs.Name} | Calculated added up row data.");
         return everythingAddedUp;
     }
 
@@ -376,7 +357,6 @@ public static class TirClass
             everythingAddedUp += addedUpPrimaryData;
         }
 
-        TimedLog($"{toFormatWs.Name} | Calculated added up column data.");
         return everythingAddedUp;
     }
 
@@ -389,33 +369,7 @@ public static class TirClass
         cellFill.PatternType = ExcelFillStyle.Solid;
 
         cellFill.BackgroundColor.SetColor((int)addedUpRowData == (int)addedUpColumnData ? Color.Green : Color.Red);
-        TimedLog($"{toFormatWs.Name} | Performed a value check.");
     }
-
-
-    /*
-     public static void GenerateChart(ExcelPackage toFormatPackage)
-    {
-        using var stream = new MemoryStream();
-
-        toFormatPackage.SaveAs(stream);
-        stream.Position = 0;
-
-        using XLWorkbook workbook = new XLWorkbook(stream);
-
-        var ws = workbook.Worksheets.FirstOrDefault(worksheet => worksheet.Position > 3 && worksheet.Name.Equals("total volume class breakdown", StringComparison.OrdinalIgnoreCase));
-        if (ws == null)
-        {
-            throw new MissingWorksheetException("TirClass.FindCorrectWorksheet() | Failed to find usable worksheet.");
-        }
-
-        var lastRow = ws.LastRowUsed().RowNumber() - 2;
-        var lastColumn = ws.LastColumnUsed().ColumnNumber() - 2;
-
-        var chart = ws
-    }
-    */
-
 
     public static void Styling(ExcelWorksheet toFormatWs)
     {
@@ -448,7 +402,5 @@ public static class TirClass
                 HelperFunctions.BorderAround(toFormatWs, row, column);
             }
         }
-
-        TimedLog($"{toFormatWs.Name} | Styled worksheet.");
     }
 }
